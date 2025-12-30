@@ -208,14 +208,13 @@ cmd_master() {
     get_all_sessions | grep -v "^${master_session}$" | while read session; do
       local window=$(eval "$TMUX_CMD" list-windows -t "$session" -F '#{window_name}' 2>/dev/null | head -1)
       if [ -n "$window" ]; then
-        eval "$TMUX_CMD" link-window -s "$session:0" -t "${master_session}:$index" -k "$window" 2>/dev/null || true
+        eval "$TMUX_CMD" link-window -s "$session:1" -t "${master_session}:$index" -k "$window" 2>/dev/null || true
         index=$((index + 1))
       fi
     done
 
-    # 删除初始窗口
+    # 删除初始窗口（链接操作后原窗口已被移到末尾）
     eval "$TMUX_CMD" kill-window -t "${master_session}:master" 2>/dev/null || true
-    eval "$TMUX_CMD" rename-window -t "${master_session}:0" "overview" 2>/dev/null || true
 
     echo "已创建 master session（包含 $(($index - 1)) 个实例的链接窗口）"
   fi
