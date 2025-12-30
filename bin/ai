@@ -1,0 +1,281 @@
+#!/usr/bin/env bash
+# ai - AI tmux session 简短管理命令 v0.0.1
+# 委托给 ai-tmux，提供更简洁的接口
+
+set -euo pipefail
+
+script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
+# 配置文件路径：优先使用 ~/.config/tmux-ai/，否则使用相对于脚本的路径
+CONFIG_DIR="${TMUX_AI_CONFIG:-$HOME/.config/tmux-ai}"
+if [ -d "$CONFIG_DIR" ]; then
+  tmux_conf="$CONFIG_DIR/.tmux.conf"
+  types_yaml="$CONFIG_DIR/ai-types.yaml"
+else
+  tmux_conf="$script_dir/../config/.tmux.conf"
+  types_yaml="$script_dir/../config/ai-types.yaml"
+fi
+
+TMUX_BIN="$script_dir/ai-tmux"
+TMUX_CMD="tmux -f \"$tmux_conf\" -L ai"
+
+# 检查 ai-tmux 是否存在
+if [ ! -f "$TMUX_BIN" ]; then
+  echo "错误: $TMUX_BIN 不存在" >&2
+  exit 1
+fi
+
+# 快捷别名映射
+# c1 → claude-1, g2 → gemini-2, x1 → codex-1
+expand_shortcut() {
+  local input="$1"
+  case "$input" in
+    c[0-9]*) echo "claude-${input#c}" ;;
+    g[0-9]*) echo "gemini-${input#g}" ;;
+    x[0-9]*) echo "codex-${input#x}" ;;
+    *) echo "$input" ;;
+  esac
+}
+
+# 模糊匹配：根据前缀找实例
+fuzzy_match() {
+  local pattern="$1"
+  local sessions=$($TMUX_CMD list-sessions 2>/dev/null | grep -oE '^ai-[a-z]+-[0-9]+' || true)
+
+  if [ -z "$sessions" ]; then
+    return 1
+  fi
+
+  # 精确匹配
+  local exact=$(echo "$sessions" | grep -x "ai-${pattern}" || true)
+  if [ -n "$exact" ]; then
+    echo "$exact"
+    return 0
+  fi
+
+  # 前缀匹配
+  local prefix=$(echo "$sessions" | grep -E "ai-${pattern}" | head -1 || true)
+  if [ -n "$prefix" ]; then
+    echo "$prefix"
+    return 0
+  fi
+
+  return 1
+}
+
+# 按编号获取实例
+get_session_by_index() {
+  local idx="$1"
+  local sessions=$($TMUX_CMD list-sessions 2>/dev/null | grep -oE '^ai-[a-z]+-[0-9]+' | sort || true)
+  echo "$sessions" | sed -n "${idx}p"
+}
+
+# 列出所有实例（带编号）
+list_sessions() {
+  local sessions=$($TMUX_CMD list-sessions 2>/dev/null | grep -oE '^ai-[a-z]+-[0-9]+' | sort || true)
+
+  if [ -z "$sessions" ]; then
+    echo "没有实例"
+    return
+  fi
+
+  echo "现有实例:"
+  local idx=1
+  echo "$sessions" | while read session; do
+    local window=$($TMUX_CMD list-windows -t "$session" -F '#{window_name}' 2>/dev/null | head -1)
+    printf "  [%d] %s (%s)\n" "$idx" "$session" "$window"
+    idx=$((idx + 1))
+  done
+}
+
+# 智能切换：不带参数时自动选择实例
+smart_attach() {
+  local sessions=$($TMUX_CMD list-sessions 2>/dev/null | grep -oE '^ai-[a-z]+-[0-9]+' | sort || true)
+
+  if [ -z "$sessions" ]; then
+    echo "没有实例，创建 claude-1..."
+    exec "$TMUX_BIN" new claude
+  fi
+
+  local count=$(echo "$sessions" | wc -l)
+  if [ "$count" -eq 1 ]; then
+    local session=$(echo "$sessions" | head -1)
+    echo "附加到唯一实例: $session"
+    exec $TMUX_CMD attach -t "$session"
+  fi
+
+  # 多个实例，显示选择
+  list_sessions
+
+  if [ -t 0 ]; then
+    echo -n "选择编号 (或快捷键 c1/g1/x1，直接回车创建新 claude): "
+    read -r choice
+    if [ -z "$choice" ]; then
+      exec "$TMUX_BIN" new claude
+    fi
+
+    # 数字选择
+    if [[ "$choice" =~ ^[0-9]+$ ]]; then
+      local selected=$(get_session_by_index "$choice")
+      if [ -n "$selected" ]; then
+        exec $TMUX_CMD attach -t "$selected"
+      fi
+    fi
+
+    # 快捷键选择
+    local expanded=$(expand_shortcut "$choice")
+    local matched=$(fuzzy_match "$expanded")
+    if [ -n "$matched" ]; then
+      exec $TMUX_CMD attach -t "$matched"
+    fi
+
+    echo "无效选择" >&2
+    exit 1
+  else
+    echo ""
+    echo "使用: ai <name|编号|快捷键>   # 如: ai claude-1, ai 1, ai c1"
+    exit 1
+  fi
+}
+
+# 重命名实例
+rename_session() {
+  local old_name="$1"
+  local new_name="$2"
+
+  # 展开快捷键
+  old_name=$(expand_shortcut "$old_name")
+
+  # 自动添加前缀
+  if [[ ! "$old_name" =~ ^ai- ]]; then
+    old_name="ai-${old_name}"
+  fi
+  if [[ ! "$new_name" =~ ^ai- ]]; then
+    new_name="ai-${new_name}"
+  fi
+
+  # 验证新名称格式
+  if ! [[ "$new_name" =~ ^ai-[a-z]+-[0-9]+$ ]]; then
+    echo "错误: 新名称格式应为 <type>-<num>，如 claude-1" >&2
+    exit 1
+  fi
+
+  # 检查旧 session 是否存在
+  if ! $TMUX_CMD has-session -t "$old_name" 2>/dev/null; then
+    echo "错误: 实例 '$old_name' 不存在" >&2
+    exit 1
+  fi
+
+  # 检查新名称是否已存在
+  if $TMUX_CMD has-session -t "$new_name" 2>/dev/null; then
+    echo "错误: 实例 '$new_name' 已存在" >&2
+    exit 1
+  fi
+
+  # 重命名
+  $TMUX_CMD rename-session -t "$old_name" "$new_name"
+  echo "已重命名: $old_name → $new_name"
+}
+
+# 主命令分发
+case "${1:-help}" in
+  ls|list)
+    list_sessions
+    ;;
+  new)
+    if [ -z "${2:-}" ]; then
+      echo "用法: ai new <type>  (claude/gemini/codex)" >&2
+      exit 1
+    fi
+    exec "$TMUX_BIN" new "$2"
+    ;;
+  master)
+    exec "$TMUX_BIN" master
+    ;;
+  rename|mv)
+    if [ -z "${2:-}" ] || [ -z "${3:-}" ]; then
+      echo "用法: ai rename <old> <new>  或  ai mv <old> <new>" >&2
+      echo "示例: ai rename c1 c3     # claude-1 → claude-3" >&2
+      echo "      ai rename claude-1 work-1" >&2
+      exit 1
+    fi
+    rename_session "$2" "$3"
+    ;;
+  delete|rm|del)
+    if [ -z "${2:-}" ]; then
+      echo "用法: ai delete <name>  (如: ai delete claude-2)" >&2
+      exit 1
+    fi
+    exec "$TMUX_BIN" delete "$2"
+    ;;
+  cleanup)
+    exec "$TMUX_BIN" cleanup
+    ;;
+  help|--help|-h)
+    cat <<'HELP'
+ai - AI tmux session 简短管理命令 v0.0.1
+
+用法:
+  ai                    智能选择实例（菜单）
+  ai list               列出所有实例（带编号）
+  ai new <type>         创建新实例 (claude/gemini/codex)
+
+快速切换:
+  ai claude-1           完整名称
+  ai c1                 快捷键 (c=claude, g=gemini, x=codex)
+  ai 1                  编号切换（第1个实例）
+
+重命名:
+  ai rename <old> <new> 重命名实例
+  ai mv c1 c3           claude-1 → claude-3
+
+管理:
+  ai master             统一视图模式
+  ai delete <name>      删除实例
+  ai cleanup            清理所有实例
+
+快捷键映射:
+  c1 → claude-1    g1 → gemini-1    x1 → codex-1
+  c2 → claude-2    g2 → gemini-2    x2 → codex-2
+
+配置:
+  TMUX_AI_CONFIG 环境变量可指定配置目录（默认: ~/.config/tmux-ai）
+
+示例:
+  ai                    # 菜单选择
+  ai c1                 # 快捷进入 claude-1
+  ai 2                  # 编号进入第2个实例
+  ai rename c1 work     # 重命名为 ai-work
+  ai list               # 查看所有
+
+文档: https://github.com/your-username/tmux-ai-cli
+HELP
+    ;;
+  "")
+    smart_attach
+    ;;
+  *)
+    # 尝试快捷键/编号/名称匹配
+    target="$1"
+
+    # 编号匹配
+    if [[ "$target" =~ ^[0-9]+$ ]]; then
+      selected=$(get_session_by_index "$target")
+      if [ -n "$selected" ]; then
+        exec $TMUX_CMD attach -t "$selected"
+      fi
+    fi
+
+    # 快捷键展开
+    expanded=$(expand_shortcut "$target")
+    matched=$(fuzzy_match "$expanded")
+
+    if [ -n "$matched" ]; then
+      exec $TMUX_CMD attach -t "$matched"
+    fi
+
+    echo "错误: 未找到实例 '$target'" >&2
+    echo "运行 'ai list' 查看所有实例" >&2
+    exit 1
+    ;;
+esac

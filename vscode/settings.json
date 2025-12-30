@@ -1,0 +1,89 @@
+{
+  "//": "tmux-ai-cli VS Code 终端配置",
+  "//": "将此文件复制到你项目的 .vscode/ 目录",
+
+  // 终端 Tabs 启用
+  "terminal.integrated.tabs.enabled": true,
+
+  // Tab 标题跟随终端发送的 title 序列（tmux 会发送）
+  "terminal.integrated.tabs.title": "${sequence}",
+
+  // 默认图标/颜色（fallback）
+  "terminal.integrated.tabs.defaultIcon": "terminal-tmux",
+  "terminal.integrated.tabs.defaultColor": "terminal.ansiBlue",
+
+  // AI 工具 terminal profiles
+  "terminal.integrated.profiles.linux": {
+    // === 常用实例（独立 session，多 Tab 可同时显示） ===
+
+    "AI: claude-1": {
+      "path": "bash",
+      "args": ["-lc", "ai claude-1 || echo 'ai 未安装，见: https://github.com/your-username/tmux-ai-cli'"],
+      "overrideName": true,
+      "icon": "sparkle",
+      "color": "terminal.ansiMagenta"
+    },
+    "AI: claude-2": {
+      "path": "bash",
+      "args": ["-lc", "ai claude-2 || echo 'ai 未安装'"],
+      "overrideName": true,
+      "icon": "sparkle",
+      "color": "terminal.ansiPurple"
+    },
+    "AI: gemini-1": {
+      "path": "bash",
+      "args": ["-lc", "ai gemini-1 || echo 'ai 未安装'"],
+      "overrideName": true,
+      "icon": "globe",
+      "color": "terminal.ansiCyan"
+    },
+    "AI: gemini-2": {
+      "path": "bash",
+      "args": ["-lc", "ai gemini-2 || echo 'ai 未安装'"],
+      "overrideName": true,
+      "icon": "globe",
+      "color": "terminal.ansiBlue"
+    },
+    "AI: codex-1": {
+      "path": "bash",
+      "args": ["-lc", "ai codex-1 || echo 'ai 未安装'"],
+      "overrideName": true,
+      "icon": "hubot",
+      "color": "terminal.ansiGreen"
+    },
+
+    // === 统一视图模式（单终端内切换所有 AI） ===
+
+    "AI: master (all)": {
+      "path": "bash",
+      "args": ["-lc", "ai master || echo 'ai 未安装'"],
+      "overrideName": true,
+      "icon": "layers",
+      "color": "terminal.ansiYellow"
+    },
+
+    // === 快速创建新实例 ===
+
+    "AI: new claude": {
+      "path": "bash",
+      "args": ["-lc", "ai new claude || echo 'ai 未安装'"],
+      "overrideName": true,
+      "icon": "sparkle",
+      "color": "terminal.ansiMagenta"
+    },
+    "AI: new gemini": {
+      "path": "bash",
+      "args": ["-lc", "ai new gemini || echo 'ai 未安装'"],
+      "overrideName": true,
+      "icon": "globe",
+      "color": "terminal.ansiCyan"
+    },
+    "AI: new codex": {
+      "path": "bash",
+      "args": ["-lc", "ai new codex || echo 'ai 未安装'"],
+      "overrideName": true,
+      "icon": "hubot",
+      "color": "terminal.ansiGreen"
+    }
+  }
+}
