@@ -2,7 +2,7 @@
 
 > 管理多个 AI 工具（Claude、Gemini、Codex）的 tmux 会话管理器
 
-[![Version](https://img.shields.io/badge/version-0.0.1-blue)](https://github.com/your-username/tmux-ai-cli)
+[![Version](https://img.shields.io/badge/version-0.0.1-blue)](https://github.com/liq22/tmux-ai-cli)
 [![License](https://img.shields.io/badge/license-MIT-green)](LICENSE)
 
 ## 特性
@@ -18,14 +18,14 @@
 ### 自动安装（推荐）
 
 ```bash
-curl -sSL https://raw.githubusercontent.com/your-username/tmux-ai-cli/main/install.sh | bash
+curl -sSL https://raw.githubusercontent.com/liq22/tmux-ai-cli/main/install.sh | bash
 ```
 
 ### 手动安装
 
 ```bash
 # 克隆仓库
-git clone https://github.com/your-username/tmux-ai-cli.git ~/tmux-ai-cli
+git clone https://github.com/liq22/tmux-ai-cli.git ~/tmux-ai-cli
 cd ~/tmux-ai-cli
 
 # 运行安装脚本
@@ -133,12 +133,31 @@ types:
 
 ## VS Code 集成
 
-将 `vscode/` 目录中的配置复制到你的项目：
+### 方式一：项目级配置
+
+在需要使用 AI 的项目根目录执行：
 
 ```bash
-cp vscode/settings.json .vscode/
-cp vscode/keybindings.json .vscode/
+mkdir -p .vscode
+cp ~/.config/tmux-ai/vscode/settings.json .vscode/
+cp ~/.config/tmux-ai/vscode/keybindings.json .vscode/
 ```
+
+### 方式二：全局用户级配置
+
+所有项目生效，复制到 VS Code 用户配置目录：
+
+```bash
+# Linux/macOS
+cp ~/.config/tmux-ai/vscode/settings.json ~/.config/Code/User/
+cp ~/.config/tmux-ai/vscode/keybindings.json ~/.config/Code/User/
+
+# Windows
+cp $env:APPDATA\tmux-ai\vscode\settings.json $env:APPDATA\Code\User\
+cp $env:APPDATA\tmux-ai\vscode\keybindings.json $env:APPDATA\Code\User\
+```
+
+> 注意：keybindings.json 会覆盖现有的快捷键配置，建议手动合并。
 
 ### 可用快捷键
 
