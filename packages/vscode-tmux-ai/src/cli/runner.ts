@@ -1,9 +1,14 @@
 import { execFile } from "node:child_process";
 
 import {
+  CliAttachResponse,
   CliErrorBase,
   CliListResponse,
+  CliNewResponse,
+  CliRenameResponse,
   CliResponse,
+  CliKillResponse,
+  CliDetachAllResponse,
   EXPECTED_PROTOCOL_VERSION,
 } from "./protocol";
 
@@ -69,6 +74,28 @@ export class CliRunner {
       this.listInFlight = null;
     });
     return this.listInFlight;
+  }
+
+  newSession(typeId: string, shortName?: string): Promise<CliNewResponse> {
+    const args = ["new", "--json", "--type", typeId];
+    if (shortName) args.push("--name", shortName);
+    return this.execJson<CliNewResponse>(args);
+  }
+
+  attach(shortName: string): Promise<CliAttachResponse> {
+    return this.execJson<CliAttachResponse>(["attach", "--json", shortName]);
+  }
+
+  rename(oldShortName: string, newShortName: string): Promise<CliRenameResponse> {
+    return this.execJson<CliRenameResponse>(["rename", "--json", oldShortName, newShortName]);
+  }
+
+  kill(shortName: string): Promise<CliKillResponse> {
+    return this.execJson<CliKillResponse>(["kill", "--json", shortName]);
+  }
+
+  detachAll(shortName: string): Promise<CliDetachAllResponse> {
+    return this.execJson<CliDetachAllResponse>(["detach-all", "--json", shortName]);
   }
 
   private execJson<TResp extends CliResponse<object>>(args: string[]): Promise<TResp> {

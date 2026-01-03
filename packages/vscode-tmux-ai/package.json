@@ -12,20 +12,109 @@
   ],
   "main": "./dist/extension.js",
   "activationEvents": [
+    "onView:tmuxAi.sessions",
     "onCommand:tmuxAi.refresh",
-    "onCommand:tmuxAi.selectCliPath"
+    "onCommand:tmuxAi.selectCliPath",
+    "onCommand:tmuxAi.session.connect",
+    "onCommand:tmuxAi.session.newClient",
+    "onCommand:tmuxAi.session.rename",
+    "onCommand:tmuxAi.session.kill"
   ],
   "contributes": {
+    "viewsContainers": {
+      "activitybar": [
+        {
+          "id": "tmuxAi",
+          "title": "Tmux AI",
+          "icon": "resources/tmux-ai.svg"
+        }
+      ]
+    },
+    "views": {
+      "tmuxAi": [
+        {
+          "id": "tmuxAi.sessions",
+          "name": "Sessions"
+        }
+      ]
+    },
     "commands": [
       {
         "command": "tmuxAi.refresh",
-        "title": "Tmux AI: Refresh Sessions"
+        "title": "Tmux AI: Refresh Sessions",
+        "icon": {
+          "light": "resources/light/refresh.svg",
+          "dark": "resources/dark/refresh.svg"
+        }
       },
       {
         "command": "tmuxAi.selectCliPath",
         "title": "Tmux AI: Select CLI Path"
+      },
+      {
+        "command": "tmuxAi.session.connect",
+        "title": "Tmux AI: Connect",
+        "icon": {
+          "light": "resources/light/connect.svg",
+          "dark": "resources/dark/connect.svg"
+        }
+      },
+      {
+        "command": "tmuxAi.session.newClient",
+        "title": "Tmux AI: New Client",
+        "icon": {
+          "light": "resources/light/new-client.svg",
+          "dark": "resources/dark/new-client.svg"
+        }
+      },
+      {
+        "command": "tmuxAi.session.rename",
+        "title": "Tmux AI: Rename Session",
+        "icon": {
+          "light": "resources/light/rename.svg",
+          "dark": "resources/dark/rename.svg"
+        }
+      },
+      {
+        "command": "tmuxAi.session.kill",
+        "title": "Tmux AI: Kill Session",
+        "icon": {
+          "light": "resources/light/kill.svg",
+          "dark": "resources/dark/kill.svg"
+        }
       }
     ],
+    "menus": {
+      "view/title": [
+        {
+          "command": "tmuxAi.refresh",
+          "when": "view == tmuxAi.sessions",
+          "group": "navigation"
+        }
+      ],
+      "view/item/context": [
+        {
+          "command": "tmuxAi.session.connect",
+          "when": "view == tmuxAi.sessions && viewItem == tmuxAi.session",
+          "group": "inline"
+        },
+        {
+          "command": "tmuxAi.session.newClient",
+          "when": "view == tmuxAi.sessions && viewItem == tmuxAi.session",
+          "group": "inline"
+        },
+        {
+          "command": "tmuxAi.session.rename",
+          "when": "view == tmuxAi.sessions && viewItem == tmuxAi.session",
+          "group": "inline"
+        },
+        {
+          "command": "tmuxAi.session.kill",
+          "when": "view == tmuxAi.sessions && viewItem == tmuxAi.session",
+          "group": "inline"
+        }
+      ]
+    },
     "configuration": {
       "title": "Tmux AI",
       "properties": {
@@ -93,4 +182,3 @@
     "typescript": "^5.0.0"
   }
 }
-

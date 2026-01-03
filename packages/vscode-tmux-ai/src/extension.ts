@@ -1,41 +1,58 @@
 import * as vscode from "vscode";
 
 import { readConfig } from "./config";
-import { CliRunner } from "./cli/runner";
+import { getCliRunner } from "./cli/factory";
 import { ensureCliPath, pickCliPath } from "./discovery";
+import { registerSessionCommands } from "./commands/session";
+import { SessionsTreeProvider } from "./tree/provider";
 
-let cachedRunner: { cliPath: string; runner: CliRunner } | null = null;
-
-function getRunner(cliPath: string): CliRunner {
+function getRunner(cliPath: string) {
   const cfg = readConfig();
-  if (cachedRunner?.cliPath === cliPath) return cachedRunner.runner;
-  cachedRunner = { cliPath, runner: new CliRunner({ cliPath, debug: cfg.debug }) };
-  return cachedRunner.runner;
+  return getCliRunner(cliPath, cfg.debug);
 }
 
 export function activate(context: vscode.ExtensionContext): void {
+  const provider = new SessionsTreeProvider();
+  context.subscriptions.push(vscode.window.registerTreeDataProvider("tmuxAi.sessions", provider));
+
   context.subscriptions.push(
     vscode.commands.registerCommand("tmuxAi.selectCliPath", async () => {
       await pickCliPath();
+      await provider.reload({ interactive: false, silent: true });
     }),
   );
 
   context.subscriptions.push(
     vscode.commands.registerCommand("tmuxAi.refresh", async () => {
-      try {
-        const cliPath = await ensureCliPath(true);
-        if (!cliPath) return;
-        const runner = getRunner(cliPath);
-        const resp = await runner.list();
-        vscode.window.showInformationMessage(`Tmux AI: ${resp.sessions.length} session(s)`);
-      } catch (err) {
-        const message = err instanceof Error ? err.message : String(err);
-        vscode.window.showErrorMessage(`Tmux AI refresh failed: ${message}`);
-      }
+      const cliPath = await ensureCliPath(true);
+      if (!cliPath) return;
+      getRunner(cliPath);
+      await provider.reload({ interactive: false, silent: false });
     }),
   );
 
-  void ensureCliPath(false);
+  registerSessionCommands(context, provider);
+
+  let passiveSyncTimer: NodeJS.Timeout | null = null;
+  context.subscriptions.push(
+    vscode.window.onDidChangeWindowState((e) => {
+      const cfg = readConfig();
+      if (!cfg.passiveSyncEnabled) return;
+      if (!e.focused) return;
+
+      if (passiveSyncTimer) clearTimeout(passiveSyncTimer);
+      passiveSyncTimer = setTimeout(() => {
+        void provider.reload({ interactive: false, silent: true });
+      }, 800);
+    }),
+  );
+  context.subscriptions.push({
+    dispose: () => {
+      if (passiveSyncTimer) clearTimeout(passiveSyncTimer);
+    },
+  });
+
+  void provider.reload({ interactive: false, silent: true });
 }
 
 export function deactivate(): void {}

@@ -39,3 +39,15 @@ export type CliListResponse = CliResponse<{
   now: string;
 }>;
 
+export type CliNewResponse = CliResponse<{ session: CliSessionInfo }>;
+
+export type CliAttachResponse = CliResponse<{
+  argv: string[];
+  session: CliSessionInfo;
+}>;
+
+export type CliRenameResponse = CliResponse<{ session: CliSessionInfo }>;
+
+export type CliKillResponse = CliResponse<Record<string, never>>;
+
+export type CliDetachAllResponse = CliResponse<Record<string, never>>;
