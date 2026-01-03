@@ -87,6 +87,8 @@ ai delete 2          # 按编号删除
 ai cleanup
 ```
 
+> 说明：`ai` 是唯一推荐入口；`ai-tmux` 仅保留为兼容命令（内部转发到 `ai`）。
+
 ### 快捷键映射
 
 | 快捷键 | 完整名称 |
@@ -162,6 +164,10 @@ cp $env:APPDATA\tmux-ai\vscode\keybindings.json $env:APPDATA\Code\User\
 ```
 
 > 注意：keybindings.json 会覆盖现有的快捷键配置，建议手动合并。
+
+## 故障排查
+
+- 如果 `ai list` 只能看到 `ai-claude-1` 这类编号实例，但 `ai-tmux list` 能看到 `ai-hi / ai-test1` 等自定义实例：说明你本机安装的 `ai` 还是旧版本，请在仓库根目录重新运行 `./install.sh` 覆盖安装。
 
 ### 可用快捷键
 

@@ -59,6 +59,7 @@ info "安装脚本到 $PREFIX/bin/..."
 cp "$script_dir/bin/ai" "$PREFIX/bin/"
 cp "$script_dir/bin/ai-tmux" "$PREFIX/bin/"
 chmod +x "$PREFIX/bin/ai" "$PREFIX/bin/ai-tmux"
+info "已安装 ai（推荐入口）；ai-tmux 为兼容命令（转发到 ai）"
 
 # 复制配置
 info "安装配置到 $CONFIG_DIR/..."
