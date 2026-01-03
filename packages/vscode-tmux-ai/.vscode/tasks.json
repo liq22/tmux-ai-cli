@@ -5,7 +5,7 @@
       "label": "tmux-ai: compile extension",
       "type": "npm",
       "script": "compile",
-      "path": "${workspaceFolder}",
+      "path": ".",
       "problemMatcher": [
         "$tsc"
       ],
@@ -18,7 +18,7 @@
       "label": "tmux-ai: watch extension",
       "type": "npm",
       "script": "watch",
-      "path": "${workspaceFolder}",
+      "path": ".",
       "isBackground": true,
       "problemMatcher": [
         "$tsc-watch"
@@ -27,4 +27,3 @@
     }
   ]
 }
-
