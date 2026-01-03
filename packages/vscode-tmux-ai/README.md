@@ -63,6 +63,18 @@ Then install the generated `.vsix`:
 - VS Code UI: **Extensions** → **⋯** → **Install from VSIX…**
 - VS Code CLI: `code --install-extension vscode-tmux-ai-0.0.1.vsix`
 
+## Debug
+
+Recommended workflow (with breakpoints):
+
+1) Open `packages/vscode-tmux-ai/` as your VS Code workspace.
+2) Run `npm install` (once) and `npm run watch` (optional).
+3) Press `F5` using the launch config **Run Extension (Tmux AI)**.
+4) In the Extension Development Host window:
+   - Run `Tmux AI: Select CLI Path` and pick your `ai` executable.
+   - Run `Tmux AI: Refresh Sessions`.
+5) View logs: **Output → Log (Extension Host)**. For extra CLI stderr logs, set `tmuxAi.debug=true`.
+
 ## Build / Package
 
 From `packages/vscode-tmux-ai/`:

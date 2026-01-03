@@ -5,6 +5,11 @@
 *.swo
 *~
 
+# Allow committing extension debug configs
+!packages/vscode-tmux-ai/.vscode/
+!packages/vscode-tmux-ai/.vscode/launch.json
+!packages/vscode-tmux-ai/.vscode/tasks.json
+
 # 系统文件
 .DS_Store
 Thumbs.db
@@ -16,3 +21,4 @@ Thumbs.db
 # VS Code extension artifacts
 packages/vscode-tmux-ai/node_modules/
 packages/vscode-tmux-ai/dist/
+*.vsix

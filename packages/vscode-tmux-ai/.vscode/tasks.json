@@ -1,0 +1,30 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "tmux-ai: compile extension",
+      "type": "npm",
+      "script": "compile",
+      "path": "${workspaceFolder}",
+      "problemMatcher": [
+        "$tsc"
+      ],
+      "group": {
+        "kind": "build",
+        "isDefault": true
+      }
+    },
+    {
+      "label": "tmux-ai: watch extension",
+      "type": "npm",
+      "script": "watch",
+      "path": "${workspaceFolder}",
+      "isBackground": true,
+      "problemMatcher": [
+        "$tsc-watch"
+      ],
+      "group": "build"
+    }
+  ]
+}
+
