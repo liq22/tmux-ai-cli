@@ -5,6 +5,7 @@ import { getCliRunner } from "./cli/factory";
 import { ensureCliPath, pickCliPath } from "./discovery";
 import { registerSessionCommands } from "./commands/session";
 import { registerOrphanedCommands } from "./commands/orphaned";
+import { registerCreateSessionCommand } from "./commands/createSession";
 import { SessionsTreeProvider } from "./tree/provider";
 import { TerminalManager } from "./terminal/manager";
 
@@ -36,6 +37,7 @@ export function activate(context: vscode.ExtensionContext): void {
 
   registerSessionCommands(context, provider, terminalManager);
   registerOrphanedCommands(context, provider, terminalManager);
+  registerCreateSessionCommand(context, provider, terminalManager);
 
   let passiveSyncTimer: NodeJS.Timeout | null = null;
   context.subscriptions.push(

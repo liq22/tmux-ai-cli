@@ -10,6 +10,7 @@ export interface TmuxAiConfig {
   terminalNameFormat: string;
   terminalMultiClientNameFormat: string;
   terminalUseProfileFallback: boolean;
+  confirmDestructiveActions: boolean;
   debug: boolean;
 }
 
@@ -27,6 +28,7 @@ export function readConfig(): TmuxAiConfig {
       "AI: {shortName} ({k})",
     ),
     terminalUseProfileFallback: cfg.get<boolean>("terminal.useProfileFallback", false),
+    confirmDestructiveActions: cfg.get<boolean>("confirm.destructiveActions", true),
     debug: cfg.get<boolean>("debug", false),
   };
 }
@@ -35,4 +37,3 @@ export async function updateCliPath(value: CliPath): Promise<void> {
   const cfg = vscode.workspace.getConfiguration("tmuxAi");
   await cfg.update("cliPath", value, vscode.ConfigurationTarget.Global);
 }
-

@@ -1,5 +1,6 @@
 import * as vscode from "vscode";
 
+import { readConfig } from "../config";
 import { OrphanedTerminalNode } from "../tree/items";
 import { SessionsTreeProvider } from "../tree/provider";
 import { TerminalManager } from "../terminal/manager";
@@ -27,13 +28,16 @@ export function registerOrphanedCommands(
       const orphaned = terminalManager.getOrphaned();
       if (orphaned.length === 0) return;
 
-      const choice = await vscode.window.showWarningMessage(
-        `Close ${orphaned.length} orphaned terminal(s)?`,
-        { modal: true },
-        "Close All",
-        "Cancel",
-      );
-      if (choice !== "Close All") return;
+      const cfg = readConfig();
+      if (cfg.confirmDestructiveActions) {
+        const choice = await vscode.window.showWarningMessage(
+          `Close ${orphaned.length} orphaned terminal(s)?`,
+          { modal: true },
+          "Close All",
+          "Cancel",
+        );
+        if (choice !== "Close All") return;
+      }
 
       for (const info of orphaned) {
         try {
@@ -46,4 +50,3 @@ export function registerOrphanedCommands(
     }),
   );
 }
-

@@ -1,14 +1,13 @@
 import { execFile } from "node:child_process";
 
 import {
-  CliAttachResponse,
   CliErrorBase,
-  CliListResponse,
-  CliNewResponse,
-  CliRenameResponse,
-  CliResponse,
-  CliKillResponse,
-  CliDetachAllResponse,
+  CliAttachOk,
+  CliListOk,
+  CliNewOk,
+  CliOk,
+  CliOkSimple,
+  CliRenameOk,
   EXPECTED_PROTOCOL_VERSION,
 } from "./protocol";
 
@@ -60,7 +59,7 @@ export class CliRunner {
   private readonly cliPath: string;
   private readonly timeoutMs: number;
   private readonly debug: boolean;
-  private listInFlight: Promise<CliListResponse> | null = null;
+  private listInFlight: Promise<CliListOk> | null = null;
 
   constructor(options: CliRunnerOptions) {
     this.cliPath = options.cliPath;
@@ -68,37 +67,37 @@ export class CliRunner {
     this.debug = options.debug ?? false;
   }
 
-  async list(): Promise<CliListResponse> {
+  async list(): Promise<CliListOk> {
     if (this.listInFlight) return this.listInFlight;
-    this.listInFlight = this.execJson<CliListResponse>(["list", "--json"]).finally(() => {
+    this.listInFlight = this.execJsonOk<CliListOk>(["list", "--json"]).finally(() => {
       this.listInFlight = null;
     });
     return this.listInFlight;
   }
 
-  newSession(typeId: string, shortName?: string): Promise<CliNewResponse> {
+  newSession(typeId: string, shortName?: string): Promise<CliNewOk> {
     const args = ["new", "--json", "--type", typeId];
     if (shortName) args.push("--name", shortName);
-    return this.execJson<CliNewResponse>(args);
+    return this.execJsonOk<CliNewOk>(args);
   }
 
-  attach(shortName: string): Promise<CliAttachResponse> {
-    return this.execJson<CliAttachResponse>(["attach", "--json", shortName]);
+  attach(shortName: string): Promise<CliAttachOk> {
+    return this.execJsonOk<CliAttachOk>(["attach", "--json", shortName]);
   }
 
-  rename(oldShortName: string, newShortName: string): Promise<CliRenameResponse> {
-    return this.execJson<CliRenameResponse>(["rename", "--json", oldShortName, newShortName]);
+  rename(oldShortName: string, newShortName: string): Promise<CliRenameOk> {
+    return this.execJsonOk<CliRenameOk>(["rename", "--json", oldShortName, newShortName]);
   }
 
-  kill(shortName: string): Promise<CliKillResponse> {
-    return this.execJson<CliKillResponse>(["kill", "--json", shortName]);
+  kill(shortName: string): Promise<CliOkSimple> {
+    return this.execJsonOk<CliOkSimple>(["kill", "--json", shortName]);
   }
 
-  detachAll(shortName: string): Promise<CliDetachAllResponse> {
-    return this.execJson<CliDetachAllResponse>(["detach-all", "--json", shortName]);
+  detachAll(shortName: string): Promise<CliOkSimple> {
+    return this.execJsonOk<CliOkSimple>(["detach-all", "--json", shortName]);
   }
 
-  private execJson<TResp extends CliResponse<object>>(args: string[]): Promise<TResp> {
+  private execJsonOk<TOk extends CliOk<object>>(args: string[]): Promise<TOk> {
     return new Promise((resolve, reject) => {
       execFile(
         this.cliPath,
@@ -119,7 +118,7 @@ export class CliRunner {
             error && typeof (error as any).code === "number" ? ((error as any).code as number) : 0;
 
           if (error) {
-            this.tryParseJson<TResp>(stdoutText)
+            this.tryParseJsonOk<TOk>(stdoutText)
               .then((parsed) => resolve(parsed))
               .catch((e) => {
                 if (e instanceof CliProtocolError || e instanceof CliResponseError) {
@@ -137,7 +136,7 @@ export class CliRunner {
             return;
           }
 
-          this.tryParseJson<TResp>(stdoutText)
+          this.tryParseJsonOk<TOk>(stdoutText)
             .then((parsed) => resolve(parsed))
             .catch((e) => {
               if (e instanceof CliProtocolError || e instanceof CliResponseError) {
@@ -157,7 +156,7 @@ export class CliRunner {
     });
   }
 
-  private async tryParseJson<TResp extends CliResponse<object>>(stdoutText: string): Promise<TResp> {
+  private async tryParseJsonOk<TOk extends CliOk<object>>(stdoutText: string): Promise<TOk> {
     let parsed: any;
     try {
       parsed = JSON.parse(stdoutText);
@@ -173,6 +172,6 @@ export class CliRunner {
       throw new CliResponseError(parsed as CliErrorBase);
     }
 
-    return parsed as TResp;
+    return parsed as TOk;
   }
 }

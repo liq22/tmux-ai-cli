@@ -10,7 +10,7 @@ import { SessionsTreeProvider } from "../tree/provider";
 
 import { SessionNode } from "../tree/items";
 import { formatMultiClientTerminalName, formatPrimaryTerminalName } from "../terminal/naming";
-import { findPrimaryTerminal } from "../terminal/scan";
+import { findPrimaryTerminal, listTerminalsForSession } from "../terminal/scan";
 import { TerminalManager } from "../terminal/manager";
 
 async function ensureRunner(interactive: boolean): Promise<CliRunner | null> {
@@ -153,7 +153,34 @@ export function registerSessionCommands(
 
         await runner.rename(oldShortName, trimmed);
         await provider.reload({ interactive: false, silent: true });
-        vscode.window.showInformationMessage(`Renamed: ${oldShortName} → ${trimmed}`);
+
+        const existing = listTerminalsForSession(oldShortName);
+        if (existing.length === 0) {
+          vscode.window.showInformationMessage(`Renamed: ${oldShortName} → ${trimmed}`);
+          return;
+        }
+
+        const choice = await vscode.window.showInformationMessage(
+          `Renamed: ${oldShortName} → ${trimmed}. ${existing.length} terminal(s) still use the old name.`,
+          "Close & Reopen",
+          "Just Close",
+          "Keep",
+        );
+
+        if (choice === "Just Close" || choice === "Close & Reopen") {
+          for (const t of existing) {
+            try {
+              t.terminal.dispose();
+            } catch {
+              // ignore
+            }
+          }
+        }
+
+        if (choice === "Close & Reopen") {
+          const newNode: SessionNode = { kind: "session", session: { ...node.session, shortName: trimmed }, typeInfo: node.typeInfo };
+          await vscode.commands.executeCommand("tmuxAi.session.connect", newNode);
+        }
       } catch (err) {
         const message = err instanceof Error ? err.message : String(err);
         vscode.window.showErrorMessage(`Rename failed: ${message}`);
@@ -172,22 +199,95 @@ export function registerSessionCommands(
           return;
         }
 
-        const choice = await vscode.window.showWarningMessage(
-          `Kill session "${shortName}"?`,
-          { modal: true },
-          "Kill",
-          "Cancel",
-        );
-        if (choice !== "Kill") return;
+        const cfg = readConfig();
+        if (cfg.confirmDestructiveActions) {
+          const choice = await vscode.window.showWarningMessage(
+            `Kill session "${shortName}"?`,
+            { modal: true },
+            "Kill",
+            "Cancel",
+          );
+          if (choice !== "Kill") return;
+        }
 
         const runner = await ensureRunner(true);
         if (!runner) return;
 
         await runner.kill(shortName);
         await provider.reload({ interactive: false, silent: true });
+
+        const terminals = listTerminalsForSession(shortName);
+        if (terminals.length > 0) {
+          const closeChoice = await vscode.window.showInformationMessage(
+            `Killed "${shortName}". Close ${terminals.length} VS Code terminal(s)?`,
+            "Close",
+            "Keep",
+          );
+          if (closeChoice === "Close") {
+            for (const t of terminals) {
+              try {
+                t.terminal.dispose();
+              } catch {
+                // ignore
+              }
+            }
+          }
+        }
       } catch (err) {
         const message = err instanceof Error ? err.message : String(err);
         vscode.window.showErrorMessage(`Kill failed: ${message}`);
+      }
+    }),
+  );
+
+  context.subscriptions.push(
+    vscode.commands.registerCommand("tmuxAi.session.detachAll", async (node: SessionNode) => {
+      try {
+        if (!node?.session?.shortName) return;
+
+        const shortName = node.session.shortName;
+        if (!isValidShortName(shortName) || shortName === "master") {
+          vscode.window.showErrorMessage(`Invalid shortName: ${shortName}`);
+          return;
+        }
+
+        const cfg = readConfig();
+        if (cfg.confirmDestructiveActions) {
+          const choice = await vscode.window.showWarningMessage(
+            `Detach all clients from "${shortName}"?`,
+            { modal: true },
+            "Detach",
+            "Cancel",
+          );
+          if (choice !== "Detach") return;
+        }
+
+        const runner = await ensureRunner(true);
+        if (!runner) return;
+
+        await runner.detachAll(shortName);
+        await provider.reload({ interactive: false, silent: true });
+
+        const terminals = listTerminalsForSession(shortName);
+        if (terminals.length > 0) {
+          const closeChoice = await vscode.window.showInformationMessage(
+            `Detached all clients. Close ${terminals.length} VS Code terminal(s)?`,
+            "Close",
+            "Keep",
+          );
+          if (closeChoice === "Close") {
+            for (const t of terminals) {
+              try {
+                t.terminal.dispose();
+              } catch {
+                // ignore
+              }
+            }
+          }
+        }
+      } catch (err) {
+        const message = err instanceof Error ? err.message : String(err);
+        vscode.window.showErrorMessage(`Detach all failed: ${message}`);
       }
     }),
   );

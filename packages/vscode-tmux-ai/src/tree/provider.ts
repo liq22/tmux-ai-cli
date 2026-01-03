@@ -3,7 +3,7 @@ import * as vscode from "vscode";
 import { readConfig } from "../config";
 import { ensureCliPath } from "../discovery";
 import { getCliRunner } from "../cli/factory";
-import { CliListResponse, CliSessionInfo } from "../cli/protocol";
+import { CliListOk, CliSessionInfo } from "../cli/protocol";
 import { TerminalManager } from "../terminal/manager";
 
 import { MessageNode, OrphanedGroupNode, OrphanedTerminalNode, SessionNode, TreeNode, TypeNode } from "./items";
@@ -13,7 +13,7 @@ export class SessionsTreeProvider implements vscode.TreeDataProvider<TreeNode> {
   private readonly onDidChangeTreeDataEmitter = new vscode.EventEmitter<TreeNode | undefined>();
   readonly onDidChangeTreeData = this.onDidChangeTreeDataEmitter.event;
 
-  private listCache: CliListResponse | null = null;
+  private listCache: CliListOk | null = null;
   private lastError: Error | null = null;
 
   constructor(private readonly terminalManager: TerminalManager) {}

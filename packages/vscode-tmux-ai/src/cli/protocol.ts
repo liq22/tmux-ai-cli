@@ -13,7 +13,9 @@ export interface CliErrorBase {
   hint?: string;
 }
 
-export type CliResponse<TOk extends object> = (CliOkBase & TOk) | CliErrorBase;
+export type CliOk<TOk extends object> = CliOkBase & TOk;
+
+export type CliResponse<TOk extends object> = CliOk<TOk> | CliErrorBase;
 
 export interface CliTypeInfo {
   label: string;
@@ -33,21 +35,21 @@ export interface CliSessionInfo {
   windowName: string;
 }
 
-export type CliListResponse = CliResponse<{
+export type CliListOk = CliOk<{
   types: Record<string, CliTypeInfo>;
   sessions: CliSessionInfo[];
   now: string;
 }>;
 
-export type CliNewResponse = CliResponse<{ session: CliSessionInfo }>;
+export type CliNewOk = CliOk<{ session: CliSessionInfo }>;
 
-export type CliAttachResponse = CliResponse<{
+export type CliAttachOk = CliOk<{
   argv: string[];
   session: CliSessionInfo;
 }>;
 
-export type CliRenameResponse = CliResponse<{ session: CliSessionInfo }>;
+export type CliRenameOk = CliOk<{ session: CliSessionInfo }>;
 
-export type CliKillResponse = CliResponse<Record<string, never>>;
+export type CliOkSimple = CliOk<Record<string, never>>;
 
-export type CliDetachAllResponse = CliResponse<Record<string, never>>;
+export type CliDetachAllOk = CliOkSimple;

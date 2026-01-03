@@ -15,10 +15,12 @@
     "onView:tmuxAi.sessions",
     "onCommand:tmuxAi.refresh",
     "onCommand:tmuxAi.selectCliPath",
+    "onCommand:tmuxAi.session.create",
     "onCommand:tmuxAi.session.connect",
     "onCommand:tmuxAi.session.newClient",
     "onCommand:tmuxAi.session.rename",
     "onCommand:tmuxAi.session.kill",
+    "onCommand:tmuxAi.session.detachAll",
     "onCommand:tmuxAi.orphan.closeTerminal",
     "onCommand:tmuxAi.orphan.closeAll"
   ],
@@ -54,6 +56,14 @@
         "title": "Tmux AI: Select CLI Path"
       },
       {
+        "command": "tmuxAi.session.create",
+        "title": "Tmux AI: New Session",
+        "icon": {
+          "light": "resources/light/create-session.svg",
+          "dark": "resources/dark/create-session.svg"
+        }
+      },
+      {
         "command": "tmuxAi.session.connect",
         "title": "Tmux AI: Connect",
         "icon": {
@@ -75,6 +85,14 @@
         "icon": {
           "light": "resources/light/rename.svg",
           "dark": "resources/dark/rename.svg"
+        }
+      },
+      {
+        "command": "tmuxAi.session.detachAll",
+        "title": "Tmux AI: Detach All Clients",
+        "icon": {
+          "light": "resources/light/detach.svg",
+          "dark": "resources/dark/detach.svg"
         }
       },
       {
@@ -110,12 +128,22 @@
           "group": "navigation"
         },
         {
+          "command": "tmuxAi.session.create",
+          "when": "view == tmuxAi.sessions",
+          "group": "navigation"
+        },
+        {
           "command": "tmuxAi.orphan.closeAll",
           "when": "view == tmuxAi.sessions && tmuxAi.hasOrphaned",
           "group": "navigation"
         }
       ],
       "view/item/context": [
+        {
+          "command": "tmuxAi.session.create",
+          "when": "view == tmuxAi.sessions && viewItem == tmuxAi.type",
+          "group": "inline"
+        },
         {
           "command": "tmuxAi.session.connect",
           "when": "view == tmuxAi.sessions && viewItem == tmuxAi.session",
@@ -128,6 +156,11 @@
         },
         {
           "command": "tmuxAi.session.rename",
+          "when": "view == tmuxAi.sessions && viewItem == tmuxAi.session",
+          "group": "inline"
+        },
+        {
+          "command": "tmuxAi.session.detachAll",
           "when": "view == tmuxAi.sessions && viewItem == tmuxAi.session",
           "group": "inline"
         },
@@ -196,6 +229,11 @@
           "type": "boolean",
           "default": false,
           "description": "Allow writing workspace .vscode/settings.json as a fallback for terminal appearance."
+        },
+        "tmuxAi.confirm.destructiveActions": {
+          "type": "boolean",
+          "default": true,
+          "description": "Confirm before destructive actions (kill, detach-all, clean orphaned terminals)."
         },
         "tmuxAi.debug": {
           "type": "boolean",
