@@ -21,7 +21,21 @@ fi
 session_prefix="ai"
 
 # 统一的 tmux 调用（使用专用的 server socket）
-TMUX_CMD="tmux -f \"$tmux_conf\" -L ai"
+TMUX_CMD=(tmux -f "$tmux_conf" -L ai)
+
+is_valid_instance_id() {
+  local id="$1"
+  [[ "$id" =~ ^[A-Za-z0-9][A-Za-z0-9_.-]*$ ]]
+}
+
+normalize_instance_id() {
+  local input="$1"
+  if [[ "$input" =~ ^${session_prefix}-(.+)$ ]]; then
+    echo "${BASH_REMATCH[1]}"
+  else
+    echo "$input"
+  fi
+}
 
 # 显示帮助信息
 show_help() {
@@ -29,7 +43,7 @@ show_help() {
 ai-tmux v0.0.1 - AI 工具 tmux 会话管理
 
 用法:
-  ai-tmux new <type>          创建新实例（自动编号，独立 session）
+  ai-tmux new <type> [name]   创建新实例（默认自动编号；可自定义 name）
   ai-tmux attach <name>       附加到指定实例
   ai-tmux <name>              附加到指定实例（简写）
   ai-tmux list                列出所有实例
@@ -45,6 +59,7 @@ ai-tmux v0.0.1 - AI 工具 tmux 会话管理
   ai-tmux new claude          # 创建 ai-claude-1
   ai-tmux new claude          # 创建 ai-claude-2
   ai-tmux new gemini          # 创建 ai-gemini-1
+  ai-tmux new claude work     # 创建 ai-work
   ai-tmux claude-1            # 附加到 claude-1
   ai-tmux master              # 统一视图（单终端内切换）
   ai-tmux list                # 列出所有实例
@@ -63,14 +78,30 @@ HELP
 # 解析 YAML 获取类型的命令
 get_cmd_for_type() {
   local type="$1"
-  grep -A 3 "^  $type:" "$types_yaml" | grep "cmd:" | sed 's/.*cmd: *//' | tr -d '"'
+  awk -v type="$type" '
+    BEGIN { in_types = 0; in_type = 0 }
+    /^[[:space:]]*types:[[:space:]]*$/ { in_types = 1; next }
+    !in_types { next }
+    $0 ~ "^  " type ":[[:space:]]*$" { in_type = 1; next }
+    in_type {
+      if ($0 ~ "^  [A-Za-z0-9_-]+:[[:space:]]*$") { exit }
+      if ($0 ~ "^[[:space:]]*cmd:[[:space:]]*") {
+        sub("^[[:space:]]*cmd:[[:space:]]*", "", $0)
+        gsub(/^[[:space:]]+|[[:space:]]+$/, "", $0)
+        if ($0 ~ /^\".*\"$/) { sub(/^\"/, "", $0); sub(/\"$/, "", $0) }
+        if ($0 ~ /^'\''.*'\''$/) { sub(/^'\''/, "", $0); sub(/'\''$/, "", $0) }
+        print $0
+        exit
+      }
+    }
+  ' "$types_yaml"
 }
 
 # 获取所有 ai-* sessions 的编号（指定类型）
 get_existing_numbers() {
   local type="$1"
-  eval "$TMUX_CMD" list-sessions 2>/dev/null | \
-    grep -o "^${session_prefix}-${type}-[0-9]*" | \
+  "${TMUX_CMD[@]}" list-sessions -F '#{session_name}' 2>/dev/null | \
+    grep -E "^${session_prefix}-${type}-[0-9]+$" | \
     sed "s/^${session_prefix}-${type}-//" | \
     sort -n
 }
@@ -91,12 +122,15 @@ get_next_number() {
 
 # 获取所有 ai-* sessions
 get_all_sessions() {
-  eval "$TMUX_CMD" list-sessions 2>/dev/null | grep -o "^${session_prefix}-[^:]*" | sort
+  "${TMUX_CMD[@]}" list-sessions -F '#{session_name}' 2>/dev/null | \
+    grep -E "^${session_prefix}-" | \
+    sort
 }
 
 # 创建新实例（独立 session）
 cmd_new() {
   local type="$1"
+  local name="${2:-}"
 
   if [ -z "$type" ]; then
     echo "错误: 请指定类型 (claude/gemini/codex)" >&2
@@ -109,23 +143,48 @@ cmd_new() {
     exit 1
   fi
 
-  local cmd=$(get_cmd_for_type "$type")
+  local cmd
+  cmd="$(get_cmd_for_type "$type")"
+  if [ -z "$cmd" ]; then
+    echo "错误: 在 $types_yaml 中未找到 '$type' 的 cmd" >&2
+    exit 1
+  fi
 
   # 检查命令是否存在
   if ! command -v "$cmd" &>/dev/null; then
     echo "警告: 命令 '$cmd' 不在 PATH 中，实例可能无法正常工作" >&2
   fi
 
-  # 获取下一个编号
-  local num=$(get_next_number "$type")
-  local session_name="${session_prefix}-${type}-${num}"
-  local window_name="${type}-${num}"
+  local instance_id
+  if [ -n "$name" ]; then
+    instance_id="$(normalize_instance_id "$name")"
+    if ! is_valid_instance_id "$instance_id"; then
+      echo "错误: name 只能包含字母/数字/._-，且必须以字母或数字开头" >&2
+      exit 1
+    fi
+    if [ "${session_prefix}-${instance_id}" = "${session_prefix}-master" ]; then
+      echo "错误: name 'master' 为保留字" >&2
+      exit 1
+    fi
+  else
+    local num
+    num="$(get_next_number "$type")"
+    instance_id="${type}-${num}"
+  fi
+
+  local session_name="${session_prefix}-${instance_id}"
+  local window_name="${instance_id}"
+
+  if "${TMUX_CMD[@]}" has-session -t "$session_name" 2>/dev/null; then
+    echo "错误: 实例 '$session_name' 已存在" >&2
+    exit 1
+  fi
 
   # 创建独立 session
-  eval "$TMUX_CMD" new-session -d -s "$session_name" -n "$window_name" "$cmd"
+  "${TMUX_CMD[@]}" new-session -d -s "$session_name" -n "$window_name" "$cmd"
 
   echo "已创建实例: $session_name"
-  exec tmux -f "$tmux_conf" -L ai attach -t "$session_name"
+  exec "${TMUX_CMD[@]}" attach -t "$session_name"
 }
 
 # 附加到实例（不存在时自动创建）
@@ -144,7 +203,7 @@ cmd_attach() {
   fi
 
   # 检查 session 是否存在
-  if ! eval "$TMUX_CMD" has-session -t "$session_name" 2>/dev/null; then
+  if ! "${TMUX_CMD[@]}" has-session -t "$session_name" 2>/dev/null; then
     # 实例不存在，尝试自动创建
     # 解析类型和编号：ai-claude-2 -> claude, 2
     if [[ "$session_name" =~ ^${session_prefix}-([a-z]+)-([0-9]+)$ ]]; then
@@ -153,11 +212,16 @@ cmd_attach() {
 
       # 验证类型是否有效
       if ! grep -q "^  $type:" "$types_yaml"; then
-        echo "错误: 未知类型 '$type'" >&2
+        echo "错误: 实例 '$session_name' 不存在；'$type' 不是已配置的 type。若这是自定义 name，请先创建：ai-tmux new <type> ${session_name#${session_prefix}-}" >&2
         exit 1
       fi
 
-      local cmd=$(get_cmd_for_type "$type")
+      local cmd
+      cmd="$(get_cmd_for_type "$type")"
+      if [ -z "$cmd" ]; then
+        echo "错误: 在 $types_yaml 中未找到 '$type' 的 cmd" >&2
+        exit 1
+      fi
       local window_name="${type}-${num}"
 
       # 检查命令是否存在
@@ -167,20 +231,22 @@ cmd_attach() {
 
       # 创建指定编号的 session
       echo "实例 $session_name 不存在，自动创建..."
-      eval "$TMUX_CMD" new-session -d -s "$session_name" -n "$window_name" "$cmd"
+      "${TMUX_CMD[@]}" new-session -d -s "$session_name" -n "$window_name" "$cmd"
       echo "已创建实例: $session_name"
     else
-      echo "错误: 实例名格式无效，应为 <type>-<num>，如 claude-1" >&2
+      echo "错误: 实例 '$session_name' 不存在；请先创建：ai-tmux new <type> <name>" >&2
       exit 1
     fi
   fi
 
-  exec tmux -f "$tmux_conf" -L ai attach -t "$session_name"
+  exec "${TMUX_CMD[@]}" attach -t "$session_name"
 }
 
 # 列出所有实例
 cmd_list() {
-  local sessions=$(get_all_sessions)
+  local master_session="${session_prefix}-master"
+  local sessions
+  sessions="$(get_all_sessions | grep -v "^${master_session}$" || true)"
 
   if [ -z "$sessions" ]; then
     echo "没有实例"
@@ -188,8 +254,8 @@ cmd_list() {
   fi
 
   echo "现有实例:"
-  echo "$sessions" | while read session; do
-    local window=$(eval "$TMUX_CMD" list-windows -t "$session" -F '#{window_name}' 2>/dev/null | head -1)
+  echo "$sessions" | while read -r session; do
+    local window=$("${TMUX_CMD[@]}" list-windows -t "$session" -F '#{window_name}' 2>/dev/null | head -1)
     echo "  $session ($window)"
   done
 }
@@ -198,28 +264,58 @@ cmd_list() {
 cmd_master() {
   local master_session="${session_prefix}-master"
 
-  # 检查 master 是否存在
-  if ! eval "$TMUX_CMD" has-session -t "$master_session" 2>/dev/null; then
-    # 创建 master session
-    eval "$TMUX_CMD" new-session -d -s "$master_session" -n "master" "sleep 1"
-
-    # 链接所有现有实例的窗口
-    local index=1
-    get_all_sessions | grep -v "^${master_session}$" | while read session; do
-      local window=$(eval "$TMUX_CMD" list-windows -t "$session" -F '#{window_name}' 2>/dev/null | head -1)
-      if [ -n "$window" ]; then
-        eval "$TMUX_CMD" link-window -s "$session:1" -t "${master_session}:$index" -k "$window" 2>/dev/null || true
-        index=$((index + 1))
-      fi
-    done
-
-    # 删除初始窗口（链接操作后原窗口已被移到末尾）
-    eval "$TMUX_CMD" kill-window -t "${master_session}:master" 2>/dev/null || true
-
-    echo "已创建 master session（包含 $(($index - 1)) 个实例的链接窗口）"
+  # 确保 master session 存在
+  if ! "${TMUX_CMD[@]}" has-session -t "$master_session" 2>/dev/null; then
+    "${TMUX_CMD[@]}" new-session -d -s "$master_session" -n "master"
   fi
 
-  exec tmux -f "$tmux_conf" -L ai attach -t "$master_session"
+  # 确保存在至少一个未链接窗口作为占位（master 里可能只剩 link-window 产生的链接窗口）
+  local has_unlinked="0"
+  while read -r _win_id win_linked; do
+    [ -z "${win_linked:-}" ] && continue
+    if [ "$win_linked" = "0" ]; then
+      has_unlinked="1"
+      break
+    fi
+  done < <("${TMUX_CMD[@]}" list-windows -t "$master_session" -F '#{window_id} #{window_linked}' 2>/dev/null || true)
+
+  if [ "$has_unlinked" = "0" ]; then
+    "${TMUX_CMD[@]}" new-window -t "$master_session" -n "master"
+  fi
+
+  # 先把 master 里所有「跨 session 链接」窗口 unlink 掉（避免 kill-window 误杀实例窗口）
+  while read -r win_id win_linked; do
+    [ -z "${win_id:-}" ] && continue
+    if [ "$win_linked" = "1" ]; then
+      "${TMUX_CMD[@]}" unlink-window -t "${master_session}:${win_id}" 2>/dev/null || true
+    fi
+  done < <("${TMUX_CMD[@]}" list-windows -t "$master_session" -F '#{window_id} #{window_linked}' 2>/dev/null || true)
+
+  # 链接所有现有实例的窗口（按 session 名排序）
+  local sessions
+  sessions="$(get_all_sessions | grep -v "^${master_session}$" || true)"
+
+  local index=1
+  local linked_count=0
+  while read -r session; do
+    [ -z "$session" ] && continue
+    if "${TMUX_CMD[@]}" link-window -k -s "${session}:1" -t "${master_session}:${index}" 2>/dev/null; then
+      index=$((index + 1))
+      linked_count=$((linked_count + 1))
+    fi
+  done <<<"$sessions"
+
+  # 有实例窗口时，清理残留的占位窗口（未链接窗口）
+  if [ "$linked_count" -gt 0 ]; then
+    while read -r win_id win_linked; do
+      [ -z "${win_id:-}" ] && continue
+      if [ "$win_linked" = "0" ]; then
+        "${TMUX_CMD[@]}" kill-window -t "${master_session}:${win_id}" 2>/dev/null || true
+      fi
+    done < <("${TMUX_CMD[@]}" list-windows -t "$master_session" -F '#{window_id} #{window_linked}' 2>/dev/null || true)
+  fi
+
+  exec "${TMUX_CMD[@]}" attach -t "$master_session"
 }
 
 # 删除实例
@@ -237,12 +333,12 @@ cmd_delete() {
     session_name="${session_prefix}-${name}"
   fi
 
-  if ! eval "$TMUX_CMD" has-session -t "$session_name" 2>/dev/null; then
+  if ! "${TMUX_CMD[@]}" has-session -t "$session_name" 2>/dev/null; then
     echo "错误: 实例 '$session_name' 不存在" >&2
     exit 1
   fi
 
-  eval "$TMUX_CMD" kill-session -t "$session_name"
+  "${TMUX_CMD[@]}" kill-session -t "$session_name"
   echo "已删除实例: $session_name"
 }
 
@@ -260,8 +356,8 @@ cmd_cleanup() {
   read -p "确认? (y/N): " confirm
 
   if [ "$confirm" = "y" ] || [ "$confirm" = "Y" ]; then
-    echo "$sessions" | while read session; do
-      eval "$TMUX_CMD" kill-session -t "$session" 2>/dev/null
+    echo "$sessions" | while read -r session; do
+      "${TMUX_CMD[@]}" kill-session -t "$session" 2>/dev/null
       echo "已删除: $session"
     done
   else
@@ -272,7 +368,7 @@ cmd_cleanup() {
 # 主命令分发
 case "${1:-}" in
   new)
-    cmd_new "${2:-}"
+    cmd_new "${2:-}" "${3:-}"
     ;;
   attach)
     cmd_attach "${2:-}"

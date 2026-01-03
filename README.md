@@ -9,6 +9,7 @@
 
 - **独立会话架构** - 每个 AI 实例是独立的 tmux session，支持多终端同时显示不同 AI
 - **智能自动编号** - 自动创建 claude-1, claude-2, gemini-1 等编号实例
+- **自定义名称** - `ai new <type> <name>` / `ai rename` 支持 ai-work 等更易记的名字
 - **快捷键切换** - `c1`、`g1`、`x1` 快速进入对应实例
 - **统一视图模式** - master 模式可在单终端内切换所有 AI
 - **VS Code 集成** - 提供终端 profiles 和快捷键配置
@@ -63,14 +64,16 @@ ai
 ai claude-1        # 完整名称
 ai c1              # 快捷键 (c=claude, g=gemini, x=codex)
 ai 1               # 编号切换（第1个实例）
+ai work            # 自定义名称（如 ai-work）
 
 # 创建新实例
 ai new claude
 ai new gemini
 ai new codex
+ai new claude work # 创建自定义名称 ai-work
 
 # 重命名实例
-ai rename claude-1 work-1
+ai rename claude-1 work
 ai mv c1 c3        # claude-1 → claude-3
 
 # 统一视图模式
@@ -78,6 +81,7 @@ ai master
 
 # 删除实例
 ai delete claude-2
+ai delete 2          # 按编号删除
 
 # 清理所有实例
 ai cleanup

@@ -17,7 +17,9 @@ else
 fi
 
 TMUX_BIN="$script_dir/ai-tmux"
-TMUX_CMD="tmux -f \"$tmux_conf\" -L ai"
+TMUX_CMD=(tmux -f "$tmux_conf" -L ai)
+SESSION_PREFIX="ai"
+MASTER_SESSION="${SESSION_PREFIX}-master"
 
 # 检查 ai-tmux 是否存在
 if [ ! -f "$TMUX_BIN" ]; then
@@ -37,28 +39,63 @@ expand_shortcut() {
   esac
 }
 
+is_valid_session_name() {
+  local name="$1"
+  [[ "$name" =~ ^${SESSION_PREFIX}-[A-Za-z0-9][A-Za-z0-9_.-]*$ ]]
+}
+
+# 获取所有实例 sessions（排除 master）
+get_instance_sessions() {
+  "${TMUX_CMD[@]}" list-sessions -F '#{session_name}' 2>/dev/null | \
+    grep -E "^${SESSION_PREFIX}-" | \
+    grep -v "^${MASTER_SESSION}$" | \
+    sort || true
+}
+
 # 模糊匹配：根据前缀找实例
 fuzzy_match() {
   local pattern="$1"
-  local sessions=$($TMUX_CMD list-sessions 2>/dev/null | grep -oE '^ai-[a-z]+-[0-9]+' || true)
+  local sessions
+  sessions="$(get_instance_sessions)"
 
   if [ -z "$sessions" ]; then
     return 1
   fi
 
+  # pattern 已经是完整 session 名
+  if [[ "$pattern" =~ ^${SESSION_PREFIX}- ]]; then
+    if echo "$sessions" | grep -Fxq "$pattern"; then
+      echo "$pattern"
+      return 0
+    fi
+
+    while read -r s; do
+      [ -z "$s" ] && continue
+      if [ "${s:0:${#pattern}}" = "$pattern" ]; then
+        echo "$s"
+        return 0
+      fi
+    done <<<"$sessions"
+
+    return 1
+  fi
+
   # 精确匹配
-  local exact=$(echo "$sessions" | grep -x "ai-${pattern}" || true)
-  if [ -n "$exact" ]; then
-    echo "$exact"
+  local candidate="${SESSION_PREFIX}-${pattern}"
+  if echo "$sessions" | grep -Fxq "$candidate"; then
+    echo "$candidate"
     return 0
   fi
 
   # 前缀匹配
-  local prefix=$(echo "$sessions" | grep -E "ai-${pattern}" | head -1 || true)
-  if [ -n "$prefix" ]; then
-    echo "$prefix"
-    return 0
-  fi
+  local prefix="${SESSION_PREFIX}-${pattern}"
+  while read -r s; do
+    [ -z "$s" ] && continue
+    if [ "${s:0:${#prefix}}" = "$prefix" ]; then
+      echo "$s"
+      return 0
+    fi
+  done <<<"$sessions"
 
   return 1
 }
@@ -66,13 +103,15 @@ fuzzy_match() {
 # 按编号获取实例
 get_session_by_index() {
   local idx="$1"
-  local sessions=$($TMUX_CMD list-sessions 2>/dev/null | grep -oE '^ai-[a-z]+-[0-9]+' | sort || true)
+  local sessions
+  sessions="$(get_instance_sessions)"
   echo "$sessions" | sed -n "${idx}p"
 }
 
 # 列出所有实例（带编号）
 list_sessions() {
-  local sessions=$($TMUX_CMD list-sessions 2>/dev/null | grep -oE '^ai-[a-z]+-[0-9]+' | sort || true)
+  local sessions
+  sessions="$(get_instance_sessions)"
 
   if [ -z "$sessions" ]; then
     echo "没有实例"
@@ -81,16 +120,24 @@ list_sessions() {
 
   echo "现有实例:"
   local idx=1
-  echo "$sessions" | while read session; do
-    local window=$($TMUX_CMD list-windows -t "$session" -F '#{window_name}' 2>/dev/null | head -1)
-    printf "  [%d] %s (%s)\n" "$idx" "$session" "$window"
+  while read -r session; do
+    [ -z "$session" ] && continue
+    local instance_id="${session#${SESSION_PREFIX}-}"
+    local window=$("${TMUX_CMD[@]}" list-windows -t "$session" -F '#{window_name}' 2>/dev/null | head -1)
+
+    if [ -n "$window" ] && [ "$window" != "$instance_id" ]; then
+      printf "  [%d] %s (%s)\n" "$idx" "$instance_id" "$window"
+    else
+      printf "  [%d] %s\n" "$idx" "$instance_id"
+    fi
     idx=$((idx + 1))
-  done
+  done <<<"$sessions"
 }
 
 # 智能切换：不带参数时自动选择实例
 smart_attach() {
-  local sessions=$($TMUX_CMD list-sessions 2>/dev/null | grep -oE '^ai-[a-z]+-[0-9]+' | sort || true)
+  local sessions
+  sessions="$(get_instance_sessions)"
 
   if [ -z "$sessions" ]; then
     echo "没有实例，创建 claude-1..."
@@ -101,7 +148,7 @@ smart_attach() {
   if [ "$count" -eq 1 ]; then
     local session=$(echo "$sessions" | head -1)
     echo "附加到唯一实例: $session"
-    exec $TMUX_CMD attach -t "$session"
+    exec "${TMUX_CMD[@]}" attach -t "$session"
   fi
 
   # 多个实例，显示选择
@@ -118,7 +165,7 @@ smart_attach() {
     if [[ "$choice" =~ ^[0-9]+$ ]]; then
       local selected=$(get_session_by_index "$choice")
       if [ -n "$selected" ]; then
-        exec $TMUX_CMD attach -t "$selected"
+        exec "${TMUX_CMD[@]}" attach -t "$selected"
       fi
     fi
 
@@ -126,7 +173,7 @@ smart_attach() {
     local expanded=$(expand_shortcut "$choice")
     local matched=$(fuzzy_match "$expanded")
     if [ -n "$matched" ]; then
-      exec $TMUX_CMD attach -t "$matched"
+      exec "${TMUX_CMD[@]}" attach -t "$matched"
     fi
 
     echo "无效选择" >&2
@@ -144,37 +191,55 @@ rename_session() {
   local new_name="$2"
 
   # 展开快捷键
-  old_name=$(expand_shortcut "$old_name")
+  old_name="$(expand_shortcut "$old_name")"
+  new_name="$(expand_shortcut "$new_name")"
 
-  # 自动添加前缀
-  if [[ ! "$old_name" =~ ^ai- ]]; then
-    old_name="ai-${old_name}"
-  fi
-  if [[ ! "$new_name" =~ ^ai- ]]; then
-    new_name="ai-${new_name}"
+  local old_session=""
+  if [[ "$old_name" =~ ^[0-9]+$ ]]; then
+    old_session="$(get_session_by_index "$old_name")"
+  else
+    old_session="$(fuzzy_match "$old_name" || true)"
   fi
 
-  # 验证新名称格式
-  if ! [[ "$new_name" =~ ^ai-[a-z]+-[0-9]+$ ]]; then
-    echo "错误: 新名称格式应为 <type>-<num>，如 claude-1" >&2
+  if [ -z "$old_session" ]; then
+    echo "错误: 未找到实例 '$old_name'" >&2
     exit 1
   fi
 
-  # 检查旧 session 是否存在
-  if ! $TMUX_CMD has-session -t "$old_name" 2>/dev/null; then
-    echo "错误: 实例 '$old_name' 不存在" >&2
+  # 自动添加前缀
+  if [[ ! "$new_name" =~ ^${SESSION_PREFIX}- ]]; then
+    new_name="${SESSION_PREFIX}-${new_name}"
+  fi
+
+  if ! is_valid_session_name "$new_name"; then
+    echo "错误: 新名称只能包含字母/数字/._-，且必须以字母或数字开头" >&2
+    exit 1
+  fi
+
+  if [ "$new_name" = "$MASTER_SESSION" ]; then
+    echo "错误: '$new_name' 为保留名称" >&2
     exit 1
   fi
 
   # 检查新名称是否已存在
-  if $TMUX_CMD has-session -t "$new_name" 2>/dev/null; then
+  if "${TMUX_CMD[@]}" has-session -t "$new_name" 2>/dev/null; then
     echo "错误: 实例 '$new_name' 已存在" >&2
     exit 1
   fi
 
   # 重命名
-  $TMUX_CMD rename-session -t "$old_name" "$new_name"
-  echo "已重命名: $old_name → $new_name"
+  "${TMUX_CMD[@]}" rename-session -t "$old_session" "$new_name"
+
+  # 单窗口实例：同步窗口名为新 id（方便 master 视图与列表展示）
+  local win_count
+  win_count="$("${TMUX_CMD[@]}" list-windows -t "$new_name" -F '#{window_index}' 2>/dev/null | wc -l | tr -d ' ')"
+  if [ "$win_count" = "1" ]; then
+    local first_idx
+    first_idx="$("${TMUX_CMD[@]}" list-windows -t "$new_name" -F '#{window_index}' 2>/dev/null | head -1)"
+    "${TMUX_CMD[@]}" rename-window -t "${new_name}:${first_idx}" "${new_name#${SESSION_PREFIX}-}" 2>/dev/null || true
+  fi
+
+  echo "已重命名: ${old_session#${SESSION_PREFIX}-} → ${new_name#${SESSION_PREFIX}-}"
 }
 
 # 主命令分发
@@ -184,10 +249,10 @@ case "${1:-help}" in
     ;;
   new)
     if [ -z "${2:-}" ]; then
-      echo "用法: ai new <type>  (claude/gemini/codex)" >&2
+      echo "用法: ai new <type> [name]  (claude/gemini/codex)" >&2
       exit 1
     fi
-    exec "$TMUX_BIN" new "$2"
+    exec "$TMUX_BIN" new "$2" "${3:-}"
     ;;
   master)
     exec "$TMUX_BIN" master
@@ -196,17 +261,26 @@ case "${1:-help}" in
     if [ -z "${2:-}" ] || [ -z "${3:-}" ]; then
       echo "用法: ai rename <old> <new>  或  ai mv <old> <new>" >&2
       echo "示例: ai rename c1 c3     # claude-1 → claude-3" >&2
-      echo "      ai rename claude-1 work-1" >&2
+      echo "      ai rename c1 work   # claude-1 → ai-work" >&2
       exit 1
     fi
     rename_session "$2" "$3"
     ;;
   delete|rm|del)
     if [ -z "${2:-}" ]; then
-      echo "用法: ai delete <name>  (如: ai delete claude-2)" >&2
+      echo "用法: ai delete <name|编号>  (如: ai delete claude-2 / ai delete 2)" >&2
       exit 1
     fi
-    exec "$TMUX_BIN" delete "$2"
+    if [[ "$2" =~ ^[0-9]+$ ]]; then
+      selected="$(get_session_by_index "$2")"
+      if [ -z "$selected" ]; then
+        echo "错误: 无效编号 '$2'" >&2
+        exit 1
+      fi
+      exec "$TMUX_BIN" delete "${selected#${SESSION_PREFIX}-}"
+    fi
+
+    exec "$TMUX_BIN" delete "$(expand_shortcut "$2")"
     ;;
   cleanup)
     exec "$TMUX_BIN" cleanup
@@ -218,7 +292,7 @@ ai - AI tmux session 简短管理命令 v0.0.1
 用法:
   ai                    智能选择实例（菜单）
   ai list               列出所有实例（带编号）
-  ai new <type>         创建新实例 (claude/gemini/codex)
+  ai new <type> [name]  创建新实例 (claude/gemini/codex)
 
 快速切换:
   ai claude-1           完整名称
@@ -231,7 +305,7 @@ ai - AI tmux session 简短管理命令 v0.0.1
 
 管理:
   ai master             统一视图模式
-  ai delete <name>      删除实例
+  ai delete <name|编号> 删除实例
   ai cleanup            清理所有实例
 
 快捷键映射:
@@ -245,6 +319,8 @@ ai - AI tmux session 简短管理命令 v0.0.1
   ai                    # 菜单选择
   ai c1                 # 快捷进入 claude-1
   ai 2                  # 编号进入第2个实例
+  ai work               # 进入 ai-work（自定义名称）
+  ai new claude work    # 创建 ai-work
   ai rename c1 work     # 重命名为 ai-work
   ai list               # 查看所有
 
@@ -262,7 +338,7 @@ HELP
     if [[ "$target" =~ ^[0-9]+$ ]]; then
       selected=$(get_session_by_index "$target")
       if [ -n "$selected" ]; then
-        exec $TMUX_CMD attach -t "$selected"
+        exec "${TMUX_CMD[@]}" attach -t "$selected"
       fi
     fi
 
@@ -271,11 +347,9 @@ HELP
     matched=$(fuzzy_match "$expanded")
 
     if [ -n "$matched" ]; then
-      exec $TMUX_CMD attach -t "$matched"
+      exec "${TMUX_CMD[@]}" attach -t "$matched"
     fi
 
-    echo "错误: 未找到实例 '$target'" >&2
-    echo "运行 'ai list' 查看所有实例" >&2
-    exit 1
+    exec "$TMUX_BIN" attach "$expanded"
     ;;
 esac

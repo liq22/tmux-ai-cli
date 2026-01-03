@@ -5,6 +5,17 @@ All notable changes to tmux-ai-cli will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+
+- 支持 `ai new <type> [name]` 创建自定义名称实例（如 `ai-work`）
+- `ai delete <index>` 支持按编号删除
+
+### Fixed
+
+- `ai master` 统一视图模式创建/刷新窗口逻辑
+
 ## [0.0.1] - 2025-12-29
 
 ### Added
@@ -24,7 +35,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ```bash
 ai                    # 智能选择实例（菜单）
 ai list               # 列出所有实例
-ai new <type>         # 创建新实例
+ai new <type> [name]  # 创建新实例
 ai <name>             # 附加到实例
 ai c1 / g1 / x1       # 快捷键切换
 ai rename <old> <new> # 重命名实例
