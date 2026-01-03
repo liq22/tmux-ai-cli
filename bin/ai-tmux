@@ -19,13 +19,15 @@ else
 fi
 
 session_prefix="ai"
+TMUX_SOCKET="${TMUX_AI_SOCKET:-ai}"
 
 # 统一的 tmux 调用（使用专用的 server socket）
-TMUX_CMD=(tmux -f "$tmux_conf" -L ai)
+TMUX_CMD=(tmux -f "$tmux_conf" -L "$TMUX_SOCKET")
+TMUX_AI_TYPE_OPTION="@tmux_ai_type"
 
 is_valid_instance_id() {
   local id="$1"
-  [[ "$id" =~ ^[A-Za-z0-9][A-Za-z0-9_.-]*$ ]]
+  [[ "$id" =~ ^[A-Za-z0-9_-]+$ ]]
 }
 
 normalize_instance_id() {
@@ -159,7 +161,7 @@ cmd_new() {
   if [ -n "$name" ]; then
     instance_id="$(normalize_instance_id "$name")"
     if ! is_valid_instance_id "$instance_id"; then
-      echo "错误: name 只能包含字母/数字/._-，且必须以字母或数字开头" >&2
+      echo "错误: name 只能包含字母/数字/_-" >&2
       exit 1
     fi
     if [ "${session_prefix}-${instance_id}" = "${session_prefix}-master" ]; then
@@ -167,21 +169,42 @@ cmd_new() {
       exit 1
     fi
   else
-    local num
-    num="$(get_next_number "$type")"
-    instance_id="${type}-${num}"
+    instance_id=""
   fi
 
-  local session_name="${session_prefix}-${instance_id}"
-  local window_name="${instance_id}"
-
-  if "${TMUX_CMD[@]}" has-session -t "$session_name" 2>/dev/null; then
-    echo "错误: 实例 '$session_name' 已存在" >&2
-    exit 1
+  local session_name window_name
+  if [ -n "$instance_id" ]; then
+    session_name="${session_prefix}-${instance_id}"
+    window_name="${instance_id}"
+    if "${TMUX_CMD[@]}" has-session -t "$session_name" 2>/dev/null; then
+      echo "错误: 实例 '$session_name' 已存在" >&2
+      exit 1
+    fi
+    "${TMUX_CMD[@]}" new-session -d -s "$session_name" -n "$window_name" "$cmd"
+  else
+    local n=1
+    local deadline=$((SECONDS + 5))
+    while :; do
+      if [ "$SECONDS" -ge "$deadline" ] || [ "$n" -gt 999 ]; then
+        echo "错误: 创建超时" >&2
+        exit 1
+      fi
+      instance_id="${type}-${n}"
+      session_name="${session_prefix}-${instance_id}"
+      window_name="${instance_id}"
+      local err
+      err="$("${TMUX_CMD[@]}" new-session -d -s "$session_name" -n "$window_name" "$cmd" 2>&1)" && break
+      if echo "$err" | grep -qiE 'duplicate session|session exists'; then
+        n=$((n + 1))
+        continue
+      fi
+      echo "错误: 创建失败: $err" >&2
+      exit 1
+    done
   fi
 
-  # 创建独立 session
-  "${TMUX_CMD[@]}" new-session -d -s "$session_name" -n "$window_name" "$cmd"
+  # 记录 type 元信息（供 list --json / 扩展读取）
+  "${TMUX_CMD[@]}" set-option -t "$session_name" -q "$TMUX_AI_TYPE_OPTION" "$type" 2>/dev/null || true
 
   echo "已创建实例: $session_name"
   exec "${TMUX_CMD[@]}" attach -t "$session_name"

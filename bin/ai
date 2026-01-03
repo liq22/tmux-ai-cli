@@ -17,15 +17,124 @@ else
 fi
 
 TMUX_BIN="$script_dir/ai-tmux"
-TMUX_CMD=(tmux -f "$tmux_conf" -L ai)
+TMUX_SOCKET="${TMUX_AI_SOCKET:-ai}"
+TMUX_CMD=(tmux -f "$tmux_conf" -L "$TMUX_SOCKET")
 SESSION_PREFIX="ai"
 MASTER_SESSION="${SESSION_PREFIX}-master"
+PROTOCOL_VERSION=1
+TMUX_AI_TYPE_OPTION="@tmux_ai_type"
 
-# 检查 ai-tmux 是否存在
+# ai-tmux 为交互命令提供能力；JSON 模式不强依赖它（可直接调用 tmux）。
 if [ ! -f "$TMUX_BIN" ]; then
-  echo "错误: $TMUX_BIN 不存在" >&2
-  exit 1
+  TMUX_BIN=""
 fi
+
+log_debug() {
+  if [ "${TMUX_AI_DEBUG:-0}" != "0" ]; then
+    printf '[tmux-ai-cli] %s\n' "$*" >&2
+  fi
+}
+
+has_python3() {
+  command -v python3 >/dev/null 2>&1
+}
+
+json_escape_bash() {
+  local s="${1-}"
+  s="${s//\\/\\\\}"
+  s="${s//\"/\\\"}"
+  s="${s//$'\n'/\\n}"
+  s="${s//$'\r'/\\r}"
+  s="${s//$'\t'/\\t}"
+  printf '%s' "$s"
+}
+
+json_print_obj() {
+  if has_python3; then
+    python3 - "$PROTOCOL_VERSION" "$@" <<'PY'
+import json, sys
+
+protocol_version = int(sys.argv[1])
+payload = json.loads(sys.argv[2])
+payload.setdefault("protocolVersion", protocol_version)
+print(json.dumps(payload, ensure_ascii=False))
+PY
+    return
+  fi
+
+  printf '%s\n' "$1"
+}
+
+json_error() {
+  local code="$1"
+  local message="$2"
+  local hint="${3:-}"
+
+  if has_python3; then
+    python3 - "$PROTOCOL_VERSION" "$code" "$message" "$hint" <<'PY'
+import json, sys
+
+protocol_version = int(sys.argv[1])
+code = sys.argv[2]
+message = sys.argv[3]
+hint = sys.argv[4]
+
+obj = {"ok": False, "protocolVersion": protocol_version, "code": code, "message": message}
+if hint:
+  obj["hint"] = hint
+print(json.dumps(obj, ensure_ascii=False))
+PY
+    return 1
+  fi
+
+  local msg_esc hint_esc
+  msg_esc="$(json_escape_bash "$message")"
+  hint_esc="$(json_escape_bash "$hint")"
+
+  if [ -n "$hint" ]; then
+    printf '{"ok":false,"protocolVersion":%d,"code":"%s","message":"%s","hint":"%s"}\n' \
+      "$PROTOCOL_VERSION" "$code" "$msg_esc" "$hint_esc"
+  else
+    printf '{"ok":false,"protocolVersion":%d,"code":"%s","message":"%s"}\n' \
+      "$PROTOCOL_VERSION" "$code" "$msg_esc"
+  fi
+  return 1
+}
+
+json_ok_simple() {
+  printf '{"ok":true,"protocolVersion":%d}\n' "$PROTOCOL_VERSION"
+}
+
+iso_now() {
+  # 尽量输出 ISO8601（UTC）。
+  if date -u +"%Y-%m-%dT%H:%M:%SZ" >/dev/null 2>&1; then
+    date -u +"%Y-%m-%dT%H:%M:%SZ"
+    return
+  fi
+  date
+}
+
+epoch_to_iso_fallback() {
+  local epoch="${1:-}"
+  if [ -z "$epoch" ] || [ "$epoch" = "0" ]; then
+    printf ''
+    return
+  fi
+  if date -u -d "@$epoch" +"%Y-%m-%dT%H:%M:%SZ" >/dev/null 2>&1; then
+    date -u -d "@$epoch" +"%Y-%m-%dT%H:%M:%SZ"
+    return
+  fi
+  if date -u -r "$epoch" +"%Y-%m-%dT%H:%M:%SZ" >/dev/null 2>&1; then
+    date -u -r "$epoch" +"%Y-%m-%dT%H:%M:%SZ"
+    return
+  fi
+  printf ''
+}
+
+is_valid_short_name() {
+  local name="${1:-}"
+  [[ "$name" =~ ^[A-Za-z0-9_-]+$ ]]
+}
 
 # 快捷别名映射
 # c1 → claude-1, g2 → gemini-2, x1 → codex-1
@@ -41,7 +150,7 @@ expand_shortcut() {
 
 is_valid_session_name() {
   local name="$1"
-  [[ "$name" =~ ^${SESSION_PREFIX}-[A-Za-z0-9][A-Za-z0-9_.-]*$ ]]
+  [[ "$name" =~ ^${SESSION_PREFIX}-[A-Za-z0-9_-]+$ ]]
 }
 
 # 获取所有实例 sessions（排除 master）
@@ -50,6 +159,610 @@ get_instance_sessions() {
     grep -E "^${SESSION_PREFIX}-" | \
     grep -v "^${MASTER_SESSION}$" | \
     sort || true
+}
+
+tmux_session_from_short_name() {
+  printf '%s-%s' "$SESSION_PREFIX" "$1"
+}
+
+tmux_session_type() {
+  local session="$1"
+  local v
+  v="$("${TMUX_CMD[@]}" show-options -q -v -t "$session" "$TMUX_AI_TYPE_OPTION" 2>/dev/null || true)"
+  if [ -n "$v" ]; then
+    printf '%s' "$v"
+    return
+  fi
+
+  # 兼容旧 session：从 shortName（如 claude-1）推导 type
+  local short_name="${session#${SESSION_PREFIX}-}"
+  if [[ "$short_name" =~ ^([A-Za-z0-9_-]+)-[0-9]+$ ]]; then
+    printf '%s' "${BASH_REMATCH[1]}"
+    return
+  fi
+
+  printf ''
+}
+
+get_cmd_for_type() {
+  local type="$1"
+  awk -v type="$type" '
+    BEGIN { in_types = 0; in_type = 0 }
+    /^[[:space:]]*types:[[:space:]]*$/ { in_types = 1; next }
+    !in_types { next }
+    $0 ~ "^  " type ":[[:space:]]*$" { in_type = 1; next }
+    in_type {
+      if ($0 ~ "^  [A-Za-z0-9_-]+:[[:space:]]*$") { exit }
+      if ($0 ~ "^[[:space:]]*cmd:[[:space:]]*") {
+        sub("^[[:space:]]*cmd:[[:space:]]*", "", $0)
+        gsub(/^[[:space:]]+|[[:space:]]+$/, "", $0)
+        if ($0 ~ /^\".*\"$/) { sub(/^\"/, "", $0); sub(/\"$/, "", $0) }
+        if ($0 ~ /^'\''.*'\''$/) { sub(/^'\''/, "", $0); sub(/'\''$/, "", $0) }
+        print $0
+        exit
+      }
+    }
+  ' "$types_yaml"
+}
+
+emit_types_lines() {
+  awk '
+    BEGIN { in_types=0; current=""; icon=""; base_color=""; desc=""; label="" }
+    function flush() {
+      if (current == "") return
+      printf "T\t%s\t%s\t%s\t%s\t%s\n", current, label, icon, base_color, desc
+    }
+    /^[[:space:]]*types:[[:space:]]*$/ { in_types=1; next }
+    !in_types { next }
+    /^[A-Za-z0-9_-]+:[[:space:]]*$/ { flush(); current=""; exit }
+    /^  [A-Za-z0-9_-]+:[[:space:]]*$/ {
+      flush()
+      current=$0
+      sub(/^[[:space:]]+/, "", current)
+      sub(/:[[:space:]]*$/, "", current)
+      icon=""; base_color=""; desc=""; label=""
+      next
+    }
+    current != "" {
+      if ($1 == "icon:" ) { icon=$2; next }
+      if ($1 == "base_color:" ) { base_color=$2; next }
+      if ($1 == "label:" ) {
+        sub(/^[[:space:]]*label:[[:space:]]*/, "", $0)
+        gsub(/^[[:space:]]+|[[:space:]]+$/, "", $0)
+        gsub(/^"|"$/, "", $0)
+        gsub(/^'\''|'\''$/, "", $0)
+        label=$0
+        next
+      }
+      if ($1 == "description:" ) {
+        sub(/^[[:space:]]*description:[[:space:]]*/, "", $0)
+        gsub(/^[[:space:]]+|[[:space:]]+$/, "", $0)
+        gsub(/^"|"$/, "", $0)
+        gsub(/^'\''|'\''$/, "", $0)
+        desc=$0
+        next
+      }
+    }
+    END { flush() }
+  ' "$types_yaml"
+}
+
+emit_sessions_lines() {
+  local sessions
+  sessions="$(get_instance_sessions)"
+  if [ -z "$sessions" ]; then
+    return
+  fi
+
+  while read -r session; do
+    [ -z "$session" ] && continue
+    local short_name="${session#${SESSION_PREFIX}-}"
+    local type
+    type="$(tmux_session_type "$session")"
+    local attached_clients created_epoch last_used_epoch window_name
+    attached_clients="$("${TMUX_CMD[@]}" list-clients -t "$session" 2>/dev/null | wc -l | tr -d ' ')"
+    read -r _sess created_epoch last_used_epoch < <("${TMUX_CMD[@]}" list-sessions -t "$session" -F '#{session_name} #{session_created} #{session_activity}' 2>/dev/null || true)
+    window_name="$("${TMUX_CMD[@]}" list-windows -t "$session" -F '#{window_name}' 2>/dev/null | head -1 || true)"
+    printf 'S\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n' \
+      "$session" "$short_name" "$type" "$attached_clients" "$created_epoch" "$last_used_epoch" "$window_name"
+  done <<<"$sessions"
+}
+
+cmd_list_json() {
+  if [ ! -f "$types_yaml" ]; then
+    json_error "E_CONFIG_NOT_FOUND" "types 配置不存在" "未找到: $types_yaml"
+    return 1
+  fi
+
+  if has_python3; then
+    { emit_types_lines; emit_sessions_lines; } | python3 -c '
+import json, sys
+from datetime import datetime, timezone
+
+protocol_version = int(sys.argv[1])
+now_iso = sys.argv[2]
+
+types = {}
+sessions = []
+
+def to_iso(epoch_str: str) -> str:
+  try:
+    epoch = int(epoch_str)
+  except Exception:
+    return ""
+  if epoch <= 0:
+    return ""
+  return datetime.fromtimestamp(epoch, tz=timezone.utc).isoformat().replace("+00:00", "Z")
+
+for raw in sys.stdin:
+  raw = raw.rstrip("\n")
+  if not raw:
+    continue
+  parts = raw.split("\t")
+  kind = parts[0]
+  if kind == "T":
+    _, type_id, label, icon, base_color, desc = (parts + ["", "", "", "", ""])[:6]
+    if not label:
+      label = type_id[:1].upper() + type_id[1:]
+    types[type_id] = {"label": label, "icon": icon, "base_color": base_color, "desc": desc}
+  elif kind == "S":
+    _, name, short_name, type_id, attached, created_epoch, last_used_epoch, window_name = (parts + [""] * 8)[:8]
+    attached_int = 0
+    try:
+      attached_int = int(attached)
+    except Exception:
+      attached_int = 0
+    sessions.append({
+      "name": name,
+      "shortName": short_name,
+      "type": type_id,
+      "tmuxSession": name,
+      "attachedClients": attached_int,
+      "created": to_iso(created_epoch),
+      "lastUsed": to_iso(last_used_epoch),
+      "windowName": window_name,
+    })
+
+obj = {"ok": True, "protocolVersion": protocol_version, "types": types, "sessions": sessions, "now": now_iso}
+print(json.dumps(obj, ensure_ascii=False))
+' "$PROTOCOL_VERSION" "$(iso_now)"
+    return 0
+  fi
+
+  # fallback：纯 bash 组装 JSON
+  local now
+  now="$(iso_now)"
+  printf '{"ok":true,"protocolVersion":%d,"types":{' "$PROTOCOL_VERSION"
+
+  local first_type="1"
+  while IFS=$'\t' read -r _kind type_id label icon base_color desc; do
+    [ -z "$type_id" ] && continue
+    if [ "$first_type" = "0" ]; then
+      printf ','
+    fi
+    first_type="0"
+    if [ -z "$label" ]; then
+      label="${type_id^}"
+    fi
+    printf '"%s":{"label":"%s","icon":"%s","base_color":"%s","desc":"%s"}' \
+      "$(json_escape_bash "$type_id")" \
+      "$(json_escape_bash "$label")" \
+      "$(json_escape_bash "$icon")" \
+      "$(json_escape_bash "$base_color")" \
+      "$(json_escape_bash "$desc")"
+  done < <(emit_types_lines || true)
+
+  printf '},"sessions":['
+  local first_sess="1"
+  while IFS=$'\t' read -r _kind name short_name type_id attached created_epoch last_used_epoch window_name; do
+    [ -z "$name" ] && continue
+    if [ "$first_sess" = "0" ]; then
+      printf ','
+    fi
+    first_sess="0"
+    printf '{"name":"%s","shortName":"%s","type":"%s","tmuxSession":"%s","attachedClients":%s,"created":"%s","lastUsed":"%s","windowName":"%s"}' \
+      "$(json_escape_bash "$name")" \
+      "$(json_escape_bash "$short_name")" \
+      "$(json_escape_bash "$type_id")" \
+      "$(json_escape_bash "$name")" \
+      "${attached:-0}" \
+      "$(json_escape_bash "$(epoch_to_iso_fallback "$created_epoch")")" \
+      "$(json_escape_bash "$(epoch_to_iso_fallback "$last_used_epoch")")" \
+      "$(json_escape_bash "$window_name")"
+  done < <(emit_sessions_lines || true)
+  printf '],"now":"%s"}\n' "$(json_escape_bash "$now")"
+}
+
+tmux_new_session_atomic() {
+  local type="$1"
+  local cmd="$2"
+  local desired_short_name="${3:-}"
+
+  if [ -n "$desired_short_name" ]; then
+    local short_name="$desired_short_name"
+    local session_name
+    session_name="$(tmux_session_from_short_name "$short_name")"
+    if "${TMUX_CMD[@]}" has-session -t "$session_name" 2>/dev/null; then
+      return 3
+    fi
+    local err
+    err="$("${TMUX_CMD[@]}" new-session -d -s "$session_name" -n "$short_name" "$cmd" 2>&1)" || {
+      if echo "$err" | grep -qiE 'duplicate session|session exists'; then
+        return 3
+      fi
+      printf '%s\n' "$err" >&2
+      return 1
+    }
+    printf '%s\t%s\n' "$short_name" "$session_name"
+    return 0
+  fi
+
+  local n=1
+  local deadline=$((SECONDS + 5))
+  while :; do
+    if [ "$SECONDS" -ge "$deadline" ] || [ "$n" -gt 999 ]; then
+      return 2
+    fi
+    created_short_name="${type}-${n}"
+    created_session="$(tmux_session_from_short_name "$created_short_name")"
+    local err
+    err="$("${TMUX_CMD[@]}" new-session -d -s "$created_session" -n "$created_short_name" "$cmd" 2>&1)" && {
+      printf '%s\t%s\n' "$created_short_name" "$created_session"
+      return 0
+    }
+    if echo "$err" | grep -qiE 'duplicate session|session exists'; then
+      n=$((n + 1))
+      continue
+    fi
+    printf '%s\n' "$err" >&2
+    return 1
+  done
+}
+
+session_info_json() {
+  local session="$1"
+  local short_name="${session#${SESSION_PREFIX}-}"
+  local type
+  type="$(tmux_session_type "$session")"
+  local attached_clients created_epoch last_used_epoch window_name
+  attached_clients="$("${TMUX_CMD[@]}" list-clients -t "$session" 2>/dev/null | wc -l | tr -d ' ')"
+  read -r _sess created_epoch last_used_epoch < <("${TMUX_CMD[@]}" list-sessions -t "$session" -F '#{session_name} #{session_created} #{session_activity}' 2>/dev/null || true)
+  window_name="$("${TMUX_CMD[@]}" list-windows -t "$session" -F '#{window_name}' 2>/dev/null | head -1 || true)"
+
+  if has_python3; then
+    python3 - "$PROTOCOL_VERSION" "$(iso_now)" "$session" "$short_name" "$type" "$attached_clients" "$created_epoch" "$last_used_epoch" "$window_name" <<'PY'
+import json, sys
+from datetime import datetime, timezone
+
+protocol_version = int(sys.argv[1])
+now_iso = sys.argv[2]
+name = sys.argv[3]
+short_name = sys.argv[4]
+type_id = sys.argv[5]
+attached = sys.argv[6]
+created_epoch = sys.argv[7]
+last_used_epoch = sys.argv[8]
+window_name = sys.argv[9]
+
+def to_iso(epoch_str: str) -> str:
+  try:
+    epoch = int(epoch_str)
+  except Exception:
+    return ""
+  if epoch <= 0:
+    return ""
+  return datetime.fromtimestamp(epoch, tz=timezone.utc).isoformat().replace("+00:00", "Z")
+
+attached_int = 0
+try:
+  attached_int = int(attached)
+except Exception:
+  attached_int = 0
+
+obj = {
+  "name": name,
+  "shortName": short_name,
+  "type": type_id,
+  "tmuxSession": name,
+  "attachedClients": attached_int,
+  "created": to_iso(created_epoch),
+  "lastUsed": to_iso(last_used_epoch),
+  "windowName": window_name,
+}
+
+print(json.dumps(obj, ensure_ascii=False))
+PY
+    return 0
+  fi
+
+  printf '{"name":"%s","shortName":"%s","type":"%s","tmuxSession":"%s","attachedClients":%s,"created":"%s","lastUsed":"%s","windowName":"%s"}' \
+    "$(json_escape_bash "$session")" \
+    "$(json_escape_bash "$short_name")" \
+    "$(json_escape_bash "$type")" \
+    "$(json_escape_bash "$session")" \
+    "${attached_clients:-0}" \
+    "$(json_escape_bash "$(epoch_to_iso_fallback "$created_epoch")")" \
+    "$(json_escape_bash "$(epoch_to_iso_fallback "$last_used_epoch")")" \
+    "$(json_escape_bash "$window_name")"
+}
+
+cmd_new_json() {
+  local type=""
+  local short_name=""
+
+  shift || true
+  while [ $# -gt 0 ]; do
+    case "$1" in
+      --type)
+        type="${2:-}"
+        shift 2
+        ;;
+      --name)
+        short_name="${2:-}"
+        shift 2
+        ;;
+      --json)
+        shift 1
+        ;;
+      --help|-h)
+        json_error "E_INVALID_ARGS" "用法: ai new --json --type <typeId> [--name <shortName>]"
+        return 1
+        ;;
+      *)
+        json_error "E_INVALID_ARGS" "未知参数: $1" "用法: ai new --json --type <typeId> [--name <shortName>]"
+        return 1
+        ;;
+    esac
+  done
+
+  if [ -z "$type" ]; then
+    json_error "E_INVALID_ARGS" "缺少 --type" "用法: ai new --json --type <typeId> [--name <shortName>]"
+    return 1
+  fi
+
+  if [ ! -f "$types_yaml" ]; then
+    json_error "E_CONFIG_NOT_FOUND" "types 配置不存在" "未找到: $types_yaml"
+    return 1
+  fi
+
+  if ! grep -q "^  $type:" "$types_yaml"; then
+    json_error "E_TYPE_NOT_FOUND" "未知类型: $type" "检查 $types_yaml 的 types 定义"
+    return 1
+  fi
+
+  if [ -n "$short_name" ]; then
+    if ! is_valid_short_name "$short_name"; then
+      json_error "E_INVALID_SHORT_NAME" "非法 shortName: $short_name" "仅允许 [a-zA-Z0-9_-]+"
+      return 1
+    fi
+    if [ "${SESSION_PREFIX}-${short_name}" = "$MASTER_SESSION" ]; then
+      json_error "E_INVALID_SHORT_NAME" "shortName 'master' 为保留字" "请换一个名称"
+      return 1
+    fi
+  fi
+
+  local cmd
+  cmd="$(get_cmd_for_type "$type")"
+  if [ -z "$cmd" ]; then
+    json_error "E_TYPE_NOT_FOUND" "在配置中未找到 type 的 cmd" "type=$type; file=$types_yaml"
+    return 1
+  fi
+
+  local created_line
+  local err_rc=0
+  created_line="$(tmux_new_session_atomic "$type" "$cmd" "$short_name" 2> >(cat >&2))" || err_rc=$?
+  if [ "$err_rc" -eq 2 ]; then
+    json_error "E_TIMEOUT" "创建超时" "请稍后重试"
+    return 1
+  fi
+  if [ "$err_rc" -eq 3 ]; then
+    json_error "E_NAME_TAKEN" "名称已存在: $short_name" "换一个名字或留空自动编号"
+    return 1
+  fi
+  if [ "$err_rc" -ne 0 ] || [ -z "$created_line" ]; then
+    json_error "E_TMUX_FAILED" "创建 session 失败" "请打开 TMUX_AI_DEBUG=1 查看 stderr"
+    return 1
+  fi
+
+  local created_short created_session
+  created_short="$(printf '%s' "$created_line" | awk -F'\t' '{print $1}')"
+  created_session="$(printf '%s' "$created_line" | awk -F'\t' '{print $2}')"
+
+  "${TMUX_CMD[@]}" set-option -t "$created_session" -q "$TMUX_AI_TYPE_OPTION" "$type" 2>/dev/null || true
+
+  local session_json
+  session_json="$(session_info_json "$created_session")"
+
+  if has_python3; then
+    python3 - "$PROTOCOL_VERSION" "$session_json" <<'PY'
+import json, sys
+
+protocol_version = int(sys.argv[1])
+session = json.loads(sys.argv[2])
+obj = {"ok": True, "protocolVersion": protocol_version, "session": session}
+print(json.dumps(obj, ensure_ascii=False))
+PY
+    return 0
+  fi
+
+  printf '{"ok":true,"protocolVersion":%d,"session":%s}\n' "$PROTOCOL_VERSION" "$session_json"
+}
+
+cmd_attach_json() {
+  shift || true # attach
+  shift || true # --json
+  local short_name="${1:-}"
+  if [ -z "$short_name" ]; then
+    json_error "E_INVALID_ARGS" "用法: ai attach --json <shortName>"
+    return 1
+  fi
+  if ! is_valid_short_name "$short_name"; then
+    json_error "E_INVALID_SHORT_NAME" "非法 shortName: $short_name" "仅允许 [a-zA-Z0-9_-]+"
+    return 1
+  fi
+
+  local session
+  session="$(tmux_session_from_short_name "$short_name")"
+  if ! "${TMUX_CMD[@]}" has-session -t "$session" 2>/dev/null; then
+    json_error "E_SESSION_NOT_FOUND" "session 不存在: $short_name" "先创建：ai new --json --type <typeId>"
+    return 1
+  fi
+
+  local session_json
+  session_json="$(session_info_json "$session")"
+
+  if has_python3; then
+    python3 - "$PROTOCOL_VERSION" "$tmux_conf" "$TMUX_SOCKET" "$session" "$session_json" <<'PY'
+import json, sys
+
+protocol_version = int(sys.argv[1])
+tmux_conf = sys.argv[2]
+socket = sys.argv[3]
+session = sys.argv[4]
+session_obj = json.loads(sys.argv[5])
+
+argv = ["tmux", "-f", tmux_conf, "-L", socket, "attach", "-t", session]
+obj = {"ok": True, "protocolVersion": protocol_version, "argv": argv, "session": session_obj}
+print(json.dumps(obj, ensure_ascii=False))
+PY
+    return 0
+  fi
+
+  local conf_esc socket_esc session_esc
+  conf_esc="$(json_escape_bash "$tmux_conf")"
+  socket_esc="$(json_escape_bash "$TMUX_SOCKET")"
+  session_esc="$(json_escape_bash "$session")"
+  printf '{"ok":true,"protocolVersion":%d,"argv":["tmux","-f","%s","-L","%s","attach","-t","%s"],"session":%s}\n' \
+    "$PROTOCOL_VERSION" "$conf_esc" "$socket_esc" "$session_esc" "$session_json"
+}
+
+cmd_rename_json() {
+  shift || true # rename
+  shift || true # --json
+  local old_short="${1:-}"
+  local new_short="${2:-}"
+
+  if [ -z "$old_short" ] || [ -z "$new_short" ]; then
+    json_error "E_INVALID_ARGS" "用法: ai rename --json <oldShortName> <newShortName>"
+    return 1
+  fi
+  if ! is_valid_short_name "$old_short"; then
+    json_error "E_INVALID_SHORT_NAME" "非法 shortName: $old_short" "仅允许 [a-zA-Z0-9_-]+"
+    return 1
+  fi
+  if ! is_valid_short_name "$new_short"; then
+    json_error "E_INVALID_SHORT_NAME" "非法 shortName: $new_short" "仅允许 [a-zA-Z0-9_-]+"
+    return 1
+  fi
+  if [ "${SESSION_PREFIX}-${new_short}" = "$MASTER_SESSION" ]; then
+    json_error "E_INVALID_SHORT_NAME" "shortName 'master' 为保留字" "请换一个名称"
+    return 1
+  fi
+
+  local old_session new_session
+  old_session="$(tmux_session_from_short_name "$old_short")"
+  new_session="$(tmux_session_from_short_name "$new_short")"
+
+  if ! "${TMUX_CMD[@]}" has-session -t "$old_session" 2>/dev/null; then
+    json_error "E_SESSION_NOT_FOUND" "session 不存在: $old_short"
+    return 1
+  fi
+  if "${TMUX_CMD[@]}" has-session -t "$new_session" 2>/dev/null; then
+    json_error "E_NAME_TAKEN" "名称已存在: $new_short"
+    return 1
+  fi
+
+  local err
+  err="$("${TMUX_CMD[@]}" rename-session -t "$old_session" "$new_session" 2>&1)" || {
+    printf '%s\n' "$err" >&2
+    json_error "E_TMUX_FAILED" "rename 失败" "设置 TMUX_AI_DEBUG=1 查看 stderr"
+    return 1
+  }
+
+  local win_count
+  win_count="$("${TMUX_CMD[@]}" list-windows -t "$new_session" -F '#{window_index}' 2>/dev/null | wc -l | tr -d ' ')"
+  if [ "$win_count" = "1" ]; then
+    local first_idx
+    first_idx="$("${TMUX_CMD[@]}" list-windows -t "$new_session" -F '#{window_index}' 2>/dev/null | head -1)"
+    "${TMUX_CMD[@]}" rename-window -t "${new_session}:${first_idx}" "$new_short" 2>/dev/null || true
+  fi
+
+  local session_json
+  session_json="$(session_info_json "$new_session")"
+
+  if has_python3; then
+    python3 - "$PROTOCOL_VERSION" "$session_json" <<'PY'
+import json, sys
+
+protocol_version = int(sys.argv[1])
+session = json.loads(sys.argv[2])
+obj = {"ok": True, "protocolVersion": protocol_version, "session": session}
+print(json.dumps(obj, ensure_ascii=False))
+PY
+    return 0
+  fi
+
+  printf '{"ok":true,"protocolVersion":%d,"session":%s}\n' "$PROTOCOL_VERSION" "$session_json"
+}
+
+cmd_kill_json() {
+  shift || true # kill
+  shift || true # --json
+  local short_name="${1:-}"
+  if [ -z "$short_name" ]; then
+    json_error "E_INVALID_ARGS" "用法: ai kill --json <shortName>"
+    return 1
+  fi
+  if ! is_valid_short_name "$short_name"; then
+    json_error "E_INVALID_SHORT_NAME" "非法 shortName: $short_name" "仅允许 [a-zA-Z0-9_-]+"
+    return 1
+  fi
+
+  local session
+  session="$(tmux_session_from_short_name "$short_name")"
+  if ! "${TMUX_CMD[@]}" has-session -t "$session" 2>/dev/null; then
+    json_error "E_SESSION_NOT_FOUND" "session 不存在: $short_name"
+    return 1
+  fi
+
+  local err
+  err="$("${TMUX_CMD[@]}" kill-session -t "$session" 2>&1)" || {
+    printf '%s\n' "$err" >&2
+    json_error "E_TMUX_FAILED" "kill 失败" "设置 TMUX_AI_DEBUG=1 查看 stderr"
+    return 1
+  }
+
+  json_ok_simple
+}
+
+cmd_detach_all_json() {
+  shift || true # detach-all
+  shift || true # --json
+  local short_name="${1:-}"
+  if [ -z "$short_name" ]; then
+    json_error "E_INVALID_ARGS" "用法: ai detach-all --json <shortName>"
+    return 1
+  fi
+  if ! is_valid_short_name "$short_name"; then
+    json_error "E_INVALID_SHORT_NAME" "非法 shortName: $short_name" "仅允许 [a-zA-Z0-9_-]+"
+    return 1
+  fi
+
+  local session
+  session="$(tmux_session_from_short_name "$short_name")"
+  if ! "${TMUX_CMD[@]}" has-session -t "$session" 2>/dev/null; then
+    json_error "E_SESSION_NOT_FOUND" "session 不存在: $short_name"
+    return 1
+  fi
+
+  local err
+  err="$("${TMUX_CMD[@]}" detach-client -s "$session" 2>&1)" || {
+    printf '%s\n' "$err" >&2
+    json_error "E_TMUX_FAILED" "detach-all 失败" "设置 TMUX_AI_DEBUG=1 查看 stderr"
+    return 1
+  }
+
+  json_ok_simple
 }
 
 # 模糊匹配：根据前缀找实例
@@ -245,19 +958,75 @@ rename_session() {
 # 主命令分发
 case "${1:-help}" in
   ls|list)
+    if [ "${2:-}" = "--json" ]; then
+      cmd_list_json
+      exit $?
+    fi
     list_sessions
     ;;
   new)
+    for arg in "$@"; do
+      if [ "$arg" = "--json" ]; then
+        cmd_new_json "$@"
+        exit $?
+      fi
+    done
     if [ -z "${2:-}" ]; then
       echo "用法: ai new <type> [name]  (claude/gemini/codex)" >&2
       exit 1
     fi
+    if [ -z "$TMUX_BIN" ]; then
+      echo "错误: ai-tmux 不存在，无法执行交互 new" >&2
+      exit 1
+    fi
     exec "$TMUX_BIN" new "$2" "${3:-}"
+    ;;
+  attach)
+    if [ "${2:-}" = "--json" ]; then
+      cmd_attach_json "$@"
+      exit $?
+    fi
+    if [ -z "${2:-}" ]; then
+      echo "用法: ai attach <name>" >&2
+      exit 1
+    fi
+    if [ -z "$TMUX_BIN" ]; then
+      echo "错误: ai-tmux 不存在，无法执行交互 attach" >&2
+      exit 1
+    fi
+    exec "$TMUX_BIN" attach "$(expand_shortcut "$2")"
+    ;;
+  kill)
+    if [ "${2:-}" = "--json" ]; then
+      cmd_kill_json "$@"
+      exit $?
+    fi
+    if [ -z "${2:-}" ]; then
+      echo "用法: ai kill <name>" >&2
+      exit 1
+    fi
+    if [ -z "$TMUX_BIN" ]; then
+      echo "错误: ai-tmux 不存在，无法执行交互 kill" >&2
+      exit 1
+    fi
+    exec "$TMUX_BIN" delete "$(expand_shortcut "$2")"
+    ;;
+  detach-all)
+    if [ "${2:-}" = "--json" ]; then
+      cmd_detach_all_json "$@"
+      exit $?
+    fi
+    echo "用法: ai detach-all --json <shortName>" >&2
+    exit 1
     ;;
   master)
     exec "$TMUX_BIN" master
     ;;
   rename|mv)
+    if [ "${2:-}" = "--json" ]; then
+      cmd_rename_json "$@"
+      exit $?
+    fi
     if [ -z "${2:-}" ] || [ -z "${3:-}" ]; then
       echo "用法: ai rename <old> <new>  或  ai mv <old> <new>" >&2
       echo "示例: ai rename c1 c3     # claude-1 → claude-3" >&2
@@ -292,7 +1061,13 @@ ai - AI tmux session 简短管理命令 v0.0.1
 用法:
   ai                    智能选择实例（菜单）
   ai list               列出所有实例（带编号）
+  ai list --json         以 JSON 输出 sessions/types（供 VS Code 扩展）
   ai new <type> [name]  创建新实例 (claude/gemini/codex)
+  ai new --json --type <typeId> [--name <shortName>]  创建新实例（JSON）
+  ai attach --json <shortName>  获取 attach argv（JSON）
+  ai rename --json <oldShortName> <newShortName>  重命名（JSON）
+  ai kill --json <shortName>  删除实例（JSON）
+  ai detach-all --json <shortName>  断开所有 clients（JSON）
 
 快速切换:
   ai claude-1           完整名称
