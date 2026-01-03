@@ -1,17 +1,16 @@
-import { execFile } from "node:child_process";
-import { promisify } from "node:util";
 import * as vscode from "vscode";
 
+import { readConfig } from "./config";
+import { CliRunner } from "./cli/runner";
 import { ensureCliPath, pickCliPath } from "./discovery";
 
-const execFileAsync = promisify(execFile);
+let cachedRunner: { cliPath: string; runner: CliRunner } | null = null;
 
-async function runListJson(cliPath: string): Promise<unknown> {
-  const { stdout } = await execFileAsync(cliPath, ["list", "--json"], {
-    timeout: 10_000,
-    maxBuffer: 10 * 1024 * 1024,
-  });
-  return JSON.parse(stdout);
+function getRunner(cliPath: string): CliRunner {
+  const cfg = readConfig();
+  if (cachedRunner?.cliPath === cliPath) return cachedRunner.runner;
+  cachedRunner = { cliPath, runner: new CliRunner({ cliPath, debug: cfg.debug }) };
+  return cachedRunner.runner;
 }
 
 export function activate(context: vscode.ExtensionContext): void {
@@ -26,9 +25,9 @@ export function activate(context: vscode.ExtensionContext): void {
       try {
         const cliPath = await ensureCliPath(true);
         if (!cliPath) return;
-        const obj = await runListJson(cliPath);
-        const sessions = (obj as any)?.sessions?.length ?? 0;
-        vscode.window.showInformationMessage(`Tmux AI: ${sessions} session(s)`);
+        const runner = getRunner(cliPath);
+        const resp = await runner.list();
+        vscode.window.showInformationMessage(`Tmux AI: ${resp.sessions.length} session(s)`);
       } catch (err) {
         const message = err instanceof Error ? err.message : String(err);
         vscode.window.showErrorMessage(`Tmux AI refresh failed: ${message}`);
@@ -40,4 +39,3 @@ export function activate(context: vscode.ExtensionContext): void {
 }
 
 export function deactivate(): void {}
-
