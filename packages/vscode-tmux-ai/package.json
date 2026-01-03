@@ -28,7 +28,9 @@
     "onCommand:tmuxAi.session.detachAll",
     "onCommand:tmuxAi.orphan.closeTerminal",
     "onCommand:tmuxAi.orphan.closeAll",
-    "onCommand:tmuxAi.diagnostics"
+    "onCommand:tmuxAi.diagnostics",
+    "onCommand:tmuxAi.cli.useInstallDefaults",
+    "onCommand:tmuxAi.cli.openConfig"
   ],
   "contributes": {
     "viewsContainers": {
@@ -60,6 +62,14 @@
       {
         "command": "tmuxAi.selectCliPath",
         "title": "Tmux AI: Select CLI Path"
+      },
+      {
+        "command": "tmuxAi.cli.useInstallDefaults",
+        "title": "Tmux AI: Use CLI Install Defaults"
+      },
+      {
+        "command": "tmuxAi.cli.openConfig",
+        "title": "Tmux AI: Open CLI Config"
       },
       {
         "command": "tmuxAi.diagnostics",

@@ -55,3 +55,13 @@ export async function updateCliPath(value: CliPath): Promise<void> {
   const cfg = vscode.workspace.getConfiguration("tmuxAi");
   await cfg.update("cliPath", value, vscode.ConfigurationTarget.Global);
 }
+
+export async function updateCliSocket(value: string | null): Promise<void> {
+  const cfg = vscode.workspace.getConfiguration("tmuxAi");
+  await cfg.update("cli.socket", value, vscode.ConfigurationTarget.Global);
+}
+
+export async function updateCliConfigDir(value: string | null): Promise<void> {
+  const cfg = vscode.workspace.getConfiguration("tmuxAi");
+  await cfg.update("cli.configDir", value, vscode.ConfigurationTarget.Global);
+}
