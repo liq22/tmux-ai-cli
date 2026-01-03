@@ -27,7 +27,8 @@
     "onCommand:tmuxAi.session.kill",
     "onCommand:tmuxAi.session.detachAll",
     "onCommand:tmuxAi.orphan.closeTerminal",
-    "onCommand:tmuxAi.orphan.closeAll"
+    "onCommand:tmuxAi.orphan.closeAll",
+    "onCommand:tmuxAi.diagnostics"
   ],
   "contributes": {
     "viewsContainers": {
@@ -59,6 +60,10 @@
       {
         "command": "tmuxAi.selectCliPath",
         "title": "Tmux AI: Select CLI Path"
+      },
+      {
+        "command": "tmuxAi.diagnostics",
+        "title": "Tmux AI: Diagnostics"
       },
       {
         "command": "tmuxAi.session.create",
@@ -196,6 +201,22 @@
           ],
           "default": null,
           "description": "Path to the tmux-ai-cli executable (ai)."
+        },
+        "tmuxAi.cli.socket": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "default": null,
+          "description": "Optional override for TMUX_AI_SOCKET when running tmux-ai-cli."
+        },
+        "tmuxAi.cli.configDir": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "default": null,
+          "description": "Optional override for TMUX_AI_CONFIG when running tmux-ai-cli."
         },
         "tmuxAi.discovery.searchPaths": {
           "type": "array",

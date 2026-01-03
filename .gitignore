@@ -21,4 +21,5 @@ Thumbs.db
 # VS Code extension artifacts
 packages/vscode-tmux-ai/node_modules/
 packages/vscode-tmux-ai/dist/
+packages/vscode-tmux-ai/package-lock.json
 *.vsix

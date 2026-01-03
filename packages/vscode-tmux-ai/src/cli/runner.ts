@@ -53,18 +53,21 @@ export interface CliRunnerOptions {
   cliPath: string;
   timeoutMs?: number;
   debug?: boolean;
+  env?: NodeJS.ProcessEnv;
 }
 
 export class CliRunner {
   private readonly cliPath: string;
   private readonly timeoutMs: number;
   private readonly debug: boolean;
+  private readonly env: NodeJS.ProcessEnv | undefined;
   private listInFlight: Promise<CliListOk> | null = null;
 
   constructor(options: CliRunnerOptions) {
     this.cliPath = options.cliPath;
     this.timeoutMs = options.timeoutMs ?? 10_000;
     this.debug = options.debug ?? false;
+    this.env = options.env;
   }
 
   async list(): Promise<CliListOk> {
@@ -105,6 +108,7 @@ export class CliRunner {
         {
           timeout: this.timeoutMs,
           maxBuffer: 10 * 1024 * 1024,
+          env: this.env,
         },
         (error, stdout, stderr) => {
           const stdoutText = stdout.toString();

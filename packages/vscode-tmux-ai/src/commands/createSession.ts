@@ -2,7 +2,7 @@ import * as vscode from "vscode";
 
 import { getCliRunner } from "../cli/factory";
 import { CliTypeInfo } from "../cli/protocol";
-import { readConfig } from "../config";
+import { getCliEnvOverrides, readConfig } from "../config";
 import { ensureCliPath } from "../discovery";
 import { TerminalManager } from "../terminal/manager";
 import { isValidShortName } from "../validation";
@@ -29,7 +29,7 @@ export function registerCreateSessionCommand(
         const cliPath = await ensureCliPath(true);
         if (!cliPath) return;
 
-        const runner = getCliRunner(cliPath, cfg.debug);
+        const runner = getCliRunner(cliPath, { debug: cfg.debug, envOverrides: getCliEnvOverrides(cfg) });
 
         let typeId: string | null = null;
         let typeInfo: CliTypeInfo | null = null;

@@ -1,11 +1,12 @@
 import * as vscode from "vscode";
 
-import { readConfig } from "./config";
+import { getCliEnvOverrides, readConfig } from "./config";
 import { getCliRunner } from "./cli/factory";
 import { ensureCliPath, pickCliPath } from "./discovery";
 import { registerSessionCommands } from "./commands/session";
 import { registerOrphanedCommands } from "./commands/orphaned";
 import { registerCreateSessionCommand } from "./commands/createSession";
+import { registerDiagnosticsCommand } from "./commands/diagnostics";
 import { SessionsTreeProvider } from "./tree/provider";
 import { TerminalManager } from "./terminal/manager";
 import { ensureWorkspaceTerminalFallbackSettings } from "./workspace/fallbackSettings";
@@ -13,7 +14,7 @@ import { syncWorkspaceTerminalProfiles } from "./workspace/profileFallback";
 
 function getRunner(cliPath: string) {
   const cfg = readConfig();
-  return getCliRunner(cliPath, cfg.debug);
+  return getCliRunner(cliPath, { debug: cfg.debug, envOverrides: getCliEnvOverrides(cfg) });
 }
 
 export function activate(context: vscode.ExtensionContext): void {
@@ -30,7 +31,9 @@ export function activate(context: vscode.ExtensionContext): void {
       if (
         e.affectsConfiguration("tmuxAi.terminal.useProfileFallback") ||
         e.affectsConfiguration("tmuxAi.terminal.nameFormat") ||
-        e.affectsConfiguration("tmuxAi.cliPath")
+        e.affectsConfiguration("tmuxAi.cliPath") ||
+        e.affectsConfiguration("tmuxAi.cli.socket") ||
+        e.affectsConfiguration("tmuxAi.cli.configDir")
       ) {
         void (async () => {
           await ensureWorkspaceTerminalFallbackSettings();
@@ -42,6 +45,10 @@ export function activate(context: vscode.ExtensionContext): void {
           if (!cliPath) return;
           await syncWorkspaceTerminalProfiles({ context, cliPath, list });
         })();
+      }
+
+      if (e.affectsConfiguration("tmuxAi.cli.socket") || e.affectsConfiguration("tmuxAi.cli.configDir")) {
+        void provider.reload({ interactive: false, silent: true });
       }
     }),
   );
@@ -65,6 +72,7 @@ export function activate(context: vscode.ExtensionContext): void {
   registerSessionCommands(context, provider, terminalManager);
   registerOrphanedCommands(context, provider, terminalManager);
   registerCreateSessionCommand(context, provider, terminalManager);
+  registerDiagnosticsCommand(context);
 
   let passiveSyncTimer: NodeJS.Timeout | null = null;
   context.subscriptions.push(

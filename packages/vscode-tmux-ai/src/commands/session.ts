@@ -2,7 +2,7 @@ import * as vscode from "vscode";
 
 import { getCliRunner } from "../cli/factory";
 import { CliRunner } from "../cli/runner";
-import { readConfig } from "../config";
+import { getCliEnvOverrides, readConfig } from "../config";
 import { ensureCliPath } from "../discovery";
 import { deriveInstanceColor } from "../tree/render";
 import { isValidShortName } from "../validation";
@@ -17,7 +17,7 @@ async function ensureRunner(interactive: boolean): Promise<CliRunner | null> {
   const cfg = readConfig();
   const cliPath = await ensureCliPath(interactive);
   if (!cliPath) return null;
-  return getCliRunner(cliPath, cfg.debug);
+  return getCliRunner(cliPath, { debug: cfg.debug, envOverrides: getCliEnvOverrides(cfg) });
 }
 
 function createAttachTerminal(options: {

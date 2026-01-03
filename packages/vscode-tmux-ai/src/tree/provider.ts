@@ -1,6 +1,6 @@
 import * as vscode from "vscode";
 
-import { readConfig } from "../config";
+import { getCliEnvOverrides, readConfig } from "../config";
 import { ensureCliPath } from "../discovery";
 import { getCliRunner } from "../cli/factory";
 import { CliListOk, CliSessionInfo } from "../cli/protocol";
@@ -85,7 +85,7 @@ export class SessionsTreeProvider implements vscode.TreeDataProvider<TreeNode> {
         this.onDidChangeTreeDataEmitter.fire(undefined);
         return;
       }
-      const runner = getCliRunner(cliPath, cfg.debug);
+      const runner = getCliRunner(cliPath, { debug: cfg.debug, envOverrides: getCliEnvOverrides(cfg) });
       this.listCache = await runner.list();
       this.terminalManager.rehydrate(this.listCache.sessions);
       void vscode.commands.executeCommand("setContext", "tmuxAi.hasOrphaned", this.terminalManager.getOrphaned().length > 0);
@@ -197,7 +197,7 @@ export class SessionsTreeProvider implements vscode.TreeDataProvider<TreeNode> {
 
     if (!this.listCache && !this.lastError) {
       try {
-        const runner = getCliRunner(cliPath, cfg.debug);
+        const runner = getCliRunner(cliPath, { debug: cfg.debug, envOverrides: getCliEnvOverrides(cfg) });
         this.listCache = await runner.list();
         this.terminalManager.rehydrate(this.listCache.sessions);
         void vscode.commands.executeCommand("setContext", "tmuxAi.hasOrphaned", this.terminalManager.getOrphaned().length > 0);

@@ -10,6 +10,7 @@ type TerminalProfilesPlatformKey = "linux" | "osx" | "windows";
 interface TerminalProfile {
   path: string;
   args: string[];
+  env?: Record<string, string>;
   overrideName: boolean;
   icon: string;
   color: string;
@@ -88,9 +89,13 @@ export async function syncWorkspaceTerminalProfiles(options: {
     }
 
     const icon = options.list.types[session.type]?.icon || "terminal";
+    const env: Record<string, string> = {};
+    if (cfg.cliSocket) env.TMUX_AI_SOCKET = cfg.cliSocket;
+    if (cfg.cliConfigDir) env.TMUX_AI_CONFIG = cfg.cliConfigDir;
     const profile: TerminalProfile = {
       path: options.cliPath,
       args: ["attach", session.shortName],
+      ...(Object.keys(env).length > 0 ? { env } : {}),
       overrideName: true,
       icon,
       color: deriveInstanceColorKey(session.shortName),

@@ -37,6 +37,8 @@ CLI contract reference: `docs/cli-contract.md`.
 ## Configuration
 
 - `tmuxAi.cliPath`: path to `ai`
+- `tmuxAi.cli.socket`: override `TMUX_AI_SOCKET` for the extension (optional)
+- `tmuxAi.cli.configDir`: override `TMUX_AI_CONFIG` for the extension (optional)
 - `tmuxAi.discovery.searchPaths`: probe paths when `cliPath` is unset
 - `tmuxAi.passiveSync.enabled`: refresh on focus
 - `tmuxAi.terminal.nameFormat`: default `AI: {shortName}`
@@ -73,7 +75,13 @@ Recommended workflow (with breakpoints):
 4) In the Extension Development Host window:
    - Run `Tmux AI: Select CLI Path` and pick your `ai` executable.
    - Run `Tmux AI: Refresh Sessions`.
-5) View logs: **Output → Log (Extension Host)**. For extra CLI stderr logs, set `tmuxAi.debug=true`.
+5) Run `Tmux AI: Diagnostics` to confirm `cliPath` / socket / configDir and the session list.
+6) View logs: **Output → Log (Extension Host)**. For extra CLI stderr logs, set `tmuxAi.debug=true`.
+
+## Troubleshooting
+
+- **Extension shows 0 sessions but `ai list` shows sessions**: run `Tmux AI: Diagnostics` and ensure `tmuxAi.cliPath` points to the same `ai` you use in the shell, and that `tmuxAi.cli.socket` / `tmuxAi.cli.configDir` match your environment.
+- **Sessions created in the extension are not visible in your shell (or vice versa)**: this is almost always a backend mismatch (different `TMUX_AI_SOCKET` or `TMUX_AI_CONFIG`).
 
 ## Build / Package
 
