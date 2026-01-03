@@ -7,7 +7,12 @@ interface WorkspaceSettingUpdate {
   value: unknown;
 }
 
-function hasWorkspaceValue(inspected: vscode.ConfigurationInspect<unknown> | undefined): boolean {
+interface WorkspaceConfigurationInspectLike<T> {
+  workspaceValue?: T;
+  workspaceFolderValue?: T;
+}
+
+function hasWorkspaceValue(inspected: WorkspaceConfigurationInspectLike<unknown> | undefined): boolean {
   if (!inspected) return false;
   return inspected.workspaceValue !== undefined || inspected.workspaceFolderValue !== undefined;
 }
@@ -31,4 +36,3 @@ export async function ensureWorkspaceTerminalFallbackSettings(): Promise<void> {
     await root.update(u.key, u.value, vscode.ConfigurationTarget.Workspace);
   }
 }
-
