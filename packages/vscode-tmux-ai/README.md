@@ -45,6 +45,24 @@ CLI contract reference: `docs/cli-contract.md`.
 - `tmuxAi.terminal.useProfileFallback`: when enabled, the extension may write workspace terminal settings (tabs + per-session terminal profiles) as a fallback (no global settings changes)
 - `tmuxAi.debug`: extra logs from the extension
 
+## Install in VS Code
+
+The extension is not published to the marketplace yet. Install it via a local `.vsix`.
+
+From `packages/vscode-tmux-ai/`:
+
+```bash
+npm install
+npm run compile
+npm i -g @vscode/vsce
+vsce package
+```
+
+Then install the generated `.vsix`:
+
+- VS Code UI: **Extensions** → **⋯** → **Install from VSIX…**
+- VS Code CLI: `code --install-extension vscode-tmux-ai-0.0.1.vsix`
+
 ## Build / Package
 
 From `packages/vscode-tmux-ai/`:
