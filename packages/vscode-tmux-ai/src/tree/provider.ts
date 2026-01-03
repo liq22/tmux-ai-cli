@@ -263,10 +263,25 @@ export class SessionsTreeProvider implements vscode.TreeDataProvider<TreeNode> {
     typeNodes.sort((a, b) => a.typeInfo.label.localeCompare(b.typeInfo.label));
 
     const orphaned = this.terminalManager.getOrphaned();
+
+    const hintNodes: TreeNode[] = [];
+    if (list.sessions.length === 0) {
+      const node: MessageNode = {
+        kind: "message",
+        label: orphaned.length > 0 ? "0 sessions (possible backend mismatch)" : "No sessions found",
+        description:
+          orphaned.length > 0
+            ? "Found orphaned terminals. Check TMUX_AI_SOCKET/TMUX_AI_CONFIG and run Detect CLI Socket."
+            : "If you expected sessions, check TMUX_AI_SOCKET/TMUX_AI_CONFIG and run Detect CLI Socket.",
+        command: { command: "tmuxAi.cli.detectSocket", title: "Detect CLI Socket" },
+      };
+      hintNodes.push(node);
+    }
+
     if (orphaned.length > 0) {
       const orphanNode: OrphanedGroupNode = { kind: "orphanedGroup", terminals: orphaned };
-      return [...typeNodes, orphanNode];
+      return [...hintNodes, ...typeNodes, orphanNode];
     }
-    return typeNodes;
+    return hintNodes.length > 0 ? [...hintNodes, ...typeNodes] : typeNodes;
   }
 }

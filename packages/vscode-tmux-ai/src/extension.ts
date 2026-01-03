@@ -8,6 +8,7 @@ import { registerOrphanedCommands } from "./commands/orphaned";
 import { registerCreateSessionCommand } from "./commands/createSession";
 import { registerDiagnosticsCommand } from "./commands/diagnostics";
 import { registerCliConfigCommands } from "./commands/cliConfig";
+import { registerDetectSocketCommand } from "./commands/detectSocket";
 import { SessionsTreeProvider } from "./tree/provider";
 import { TerminalManager } from "./terminal/manager";
 import { ensureWorkspaceTerminalFallbackSettings } from "./workspace/fallbackSettings";
@@ -75,6 +76,7 @@ export function activate(context: vscode.ExtensionContext): void {
   registerCreateSessionCommand(context, provider, terminalManager);
   registerDiagnosticsCommand(context);
   registerCliConfigCommands(context, provider);
+  registerDetectSocketCommand(context, provider);
 
   let passiveSyncTimer: NodeJS.Timeout | null = null;
   context.subscriptions.push(
