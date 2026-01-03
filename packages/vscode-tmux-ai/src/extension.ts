@@ -4,7 +4,9 @@ import { readConfig } from "./config";
 import { getCliRunner } from "./cli/factory";
 import { ensureCliPath, pickCliPath } from "./discovery";
 import { registerSessionCommands } from "./commands/session";
+import { registerOrphanedCommands } from "./commands/orphaned";
 import { SessionsTreeProvider } from "./tree/provider";
+import { TerminalManager } from "./terminal/manager";
 
 function getRunner(cliPath: string) {
   const cfg = readConfig();
@@ -12,7 +14,8 @@ function getRunner(cliPath: string) {
 }
 
 export function activate(context: vscode.ExtensionContext): void {
-  const provider = new SessionsTreeProvider();
+  const terminalManager = new TerminalManager();
+  const provider = new SessionsTreeProvider(terminalManager);
   context.subscriptions.push(vscode.window.registerTreeDataProvider("tmuxAi.sessions", provider));
 
   context.subscriptions.push(
@@ -31,7 +34,8 @@ export function activate(context: vscode.ExtensionContext): void {
     }),
   );
 
-  registerSessionCommands(context, provider);
+  registerSessionCommands(context, provider, terminalManager);
+  registerOrphanedCommands(context, provider, terminalManager);
 
   let passiveSyncTimer: NodeJS.Timeout | null = null;
   context.subscriptions.push(
@@ -51,6 +55,12 @@ export function activate(context: vscode.ExtensionContext): void {
       if (passiveSyncTimer) clearTimeout(passiveSyncTimer);
     },
   });
+
+  context.subscriptions.push(
+    vscode.window.onDidCloseTerminal(() => {
+      provider.rehydrateTerminalsFromCache();
+    }),
+  );
 
   void provider.reload({ interactive: false, silent: true });
 }

@@ -10,7 +10,8 @@ import { SessionsTreeProvider } from "../tree/provider";
 
 import { SessionNode } from "../tree/items";
 import { formatMultiClientTerminalName, formatPrimaryTerminalName } from "../terminal/naming";
-import { findPrimaryTerminal, nextClientIndex } from "../terminal/scan";
+import { findPrimaryTerminal } from "../terminal/scan";
+import { TerminalManager } from "../terminal/manager";
 
 async function ensureRunner(interactive: boolean): Promise<CliRunner | null> {
   const cfg = readConfig();
@@ -41,6 +42,7 @@ function createAttachTerminal(options: {
 export function registerSessionCommands(
   context: vscode.ExtensionContext,
   provider: SessionsTreeProvider,
+  terminalManager: TerminalManager,
 ): void {
   context.subscriptions.push(
     vscode.commands.registerCommand("tmuxAi.session.connect", async (node: SessionNode) => {
@@ -53,7 +55,7 @@ export function registerSessionCommands(
           return;
         }
 
-        const existing = findPrimaryTerminal(shortName);
+        const existing = terminalManager.getPrimary(shortName) ?? findPrimaryTerminal(shortName);
         if (existing) {
           existing.show();
           return;
@@ -71,6 +73,7 @@ export function registerSessionCommands(
           argv: resp.argv,
           terminalName,
         });
+        terminalManager.trackSessionTerminal(shortName, 1, terminal);
         terminal.show();
       } catch (err) {
         const message = err instanceof Error ? err.message : String(err);
@@ -95,7 +98,7 @@ export function registerSessionCommands(
 
         const resp = await runner.attach(shortName);
         const cfg = readConfig();
-        const k = nextClientIndex(shortName);
+        const k = terminalManager.getNextClientIndex(shortName);
         const terminalName = formatMultiClientTerminalName(
           cfg.terminalMultiClientNameFormat,
           shortName,
@@ -108,6 +111,7 @@ export function registerSessionCommands(
           argv: resp.argv,
           terminalName,
         });
+        terminalManager.trackSessionTerminal(shortName, k, terminal);
         terminal.show();
       } catch (err) {
         const message = err instanceof Error ? err.message : String(err);
@@ -125,7 +129,7 @@ export function registerSessionCommands(
         if (!isValidShortName(oldShortName) || oldShortName === "master") {
           vscode.window.showErrorMessage(`Invalid shortName: ${oldShortName}`);
           return;
-        }
+}
 
         const newShortName = await vscode.window.showInputBox({
           title: "Rename Session",

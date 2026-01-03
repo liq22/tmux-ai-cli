@@ -4,8 +4,9 @@ import { readConfig } from "../config";
 import { ensureCliPath } from "../discovery";
 import { getCliRunner } from "../cli/factory";
 import { CliListResponse, CliSessionInfo } from "../cli/protocol";
+import { TerminalManager } from "../terminal/manager";
 
-import { MessageNode, SessionNode, TreeNode, TypeNode } from "./items";
+import { MessageNode, OrphanedGroupNode, OrphanedTerminalNode, SessionNode, TreeNode, TypeNode } from "./items";
 import { deriveInstanceColor, formatLastUsedDescription } from "./render";
 
 export class SessionsTreeProvider implements vscode.TreeDataProvider<TreeNode> {
@@ -15,9 +16,19 @@ export class SessionsTreeProvider implements vscode.TreeDataProvider<TreeNode> {
   private listCache: CliListResponse | null = null;
   private lastError: Error | null = null;
 
+  constructor(private readonly terminalManager: TerminalManager) {}
+
   refresh(): void {
     this.listCache = null;
     this.lastError = null;
+    void vscode.commands.executeCommand("setContext", "tmuxAi.hasOrphaned", false);
+    this.onDidChangeTreeDataEmitter.fire(undefined);
+  }
+
+  rehydrateTerminalsFromCache(): void {
+    if (!this.listCache) return;
+    this.terminalManager.rehydrate(this.listCache.sessions);
+    void vscode.commands.executeCommand("setContext", "tmuxAi.hasOrphaned", this.terminalManager.getOrphaned().length > 0);
     this.onDidChangeTreeDataEmitter.fire(undefined);
   }
 
@@ -28,11 +39,14 @@ export class SessionsTreeProvider implements vscode.TreeDataProvider<TreeNode> {
       if (!cliPath) {
         this.listCache = null;
         this.lastError = null;
+        void vscode.commands.executeCommand("setContext", "tmuxAi.hasOrphaned", false);
         this.onDidChangeTreeDataEmitter.fire(undefined);
         return;
       }
       const runner = getCliRunner(cliPath, cfg.debug);
       this.listCache = await runner.list();
+      this.terminalManager.rehydrate(this.listCache.sessions);
+      void vscode.commands.executeCommand("setContext", "tmuxAi.hasOrphaned", this.terminalManager.getOrphaned().length > 0);
       this.lastError = null;
       this.onDidChangeTreeDataEmitter.fire(undefined);
     } catch (err) {
@@ -51,6 +65,22 @@ export class SessionsTreeProvider implements vscode.TreeDataProvider<TreeNode> {
       item.description = element.description;
       item.command = element.command;
       item.contextValue = "tmuxAi.message";
+      return item;
+    }
+
+    if (element.kind === "orphanedGroup") {
+      const item = new vscode.TreeItem("Orphaned", vscode.TreeItemCollapsibleState.Expanded);
+      item.description = `${element.terminals.length} terminal(s)`;
+      item.contextValue = "tmuxAi.orphanedGroup";
+      item.iconPath = new vscode.ThemeIcon("warning", new vscode.ThemeColor("descriptionForeground"));
+      return item;
+    }
+
+    if (element.kind === "orphanedTerminal") {
+      const item = new vscode.TreeItem(element.info.name, vscode.TreeItemCollapsibleState.None);
+      item.description = "Dead";
+      item.contextValue = "tmuxAi.orphanedTerminal";
+      item.iconPath = new vscode.ThemeIcon("circle-slash", new vscode.ThemeColor("descriptionForeground"));
       return item;
     }
 
@@ -96,11 +126,16 @@ export class SessionsTreeProvider implements vscode.TreeDataProvider<TreeNode> {
         }));
     }
 
+    if (element && element.kind === "orphanedGroup") {
+      return element.terminals.map<OrphanedTerminalNode>((info) => ({ kind: "orphanedTerminal", info }));
+    }
+
     if (element) return [];
 
     const cfg = readConfig();
     const cliPath = await ensureCliPath(false);
     if (!cliPath) {
+      void vscode.commands.executeCommand("setContext", "tmuxAi.hasOrphaned", false);
       const node: MessageNode = {
         kind: "message",
         label: "Configure tmuxAi.cliPath",
@@ -114,6 +149,8 @@ export class SessionsTreeProvider implements vscode.TreeDataProvider<TreeNode> {
       try {
         const runner = getCliRunner(cliPath, cfg.debug);
         this.listCache = await runner.list();
+        this.terminalManager.rehydrate(this.listCache.sessions);
+        void vscode.commands.executeCommand("setContext", "tmuxAi.hasOrphaned", this.terminalManager.getOrphaned().length > 0);
       } catch (err) {
         this.lastError = err instanceof Error ? err : new Error(String(err));
       }
@@ -157,7 +194,12 @@ export class SessionsTreeProvider implements vscode.TreeDataProvider<TreeNode> {
     }
 
     typeNodes.sort((a, b) => a.typeInfo.label.localeCompare(b.typeInfo.label));
+
+    const orphaned = this.terminalManager.getOrphaned();
+    if (orphaned.length > 0) {
+      const orphanNode: OrphanedGroupNode = { kind: "orphanedGroup", terminals: orphaned };
+      return [...typeNodes, orphanNode];
+    }
     return typeNodes;
   }
 }
-

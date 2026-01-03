@@ -18,7 +18,9 @@
     "onCommand:tmuxAi.session.connect",
     "onCommand:tmuxAi.session.newClient",
     "onCommand:tmuxAi.session.rename",
-    "onCommand:tmuxAi.session.kill"
+    "onCommand:tmuxAi.session.kill",
+    "onCommand:tmuxAi.orphan.closeTerminal",
+    "onCommand:tmuxAi.orphan.closeAll"
   ],
   "contributes": {
     "viewsContainers": {
@@ -82,6 +84,22 @@
           "light": "resources/light/kill.svg",
           "dark": "resources/dark/kill.svg"
         }
+      },
+      {
+        "command": "tmuxAi.orphan.closeTerminal",
+        "title": "Tmux AI: Close Orphaned Terminal",
+        "icon": {
+          "light": "resources/light/close.svg",
+          "dark": "resources/dark/close.svg"
+        }
+      },
+      {
+        "command": "tmuxAi.orphan.closeAll",
+        "title": "Tmux AI: Clean Orphaned Terminals",
+        "icon": {
+          "light": "resources/light/clean.svg",
+          "dark": "resources/dark/clean.svg"
+        }
       }
     ],
     "menus": {
@@ -89,6 +107,11 @@
         {
           "command": "tmuxAi.refresh",
           "when": "view == tmuxAi.sessions",
+          "group": "navigation"
+        },
+        {
+          "command": "tmuxAi.orphan.closeAll",
+          "when": "view == tmuxAi.sessions && tmuxAi.hasOrphaned",
           "group": "navigation"
         }
       ],
@@ -111,6 +134,16 @@
         {
           "command": "tmuxAi.session.kill",
           "when": "view == tmuxAi.sessions && viewItem == tmuxAi.session",
+          "group": "inline"
+        },
+        {
+          "command": "tmuxAi.orphan.closeAll",
+          "when": "view == tmuxAi.sessions && viewItem == tmuxAi.orphanedGroup",
+          "group": "inline"
+        },
+        {
+          "command": "tmuxAi.orphan.closeTerminal",
+          "when": "view == tmuxAi.sessions && viewItem == tmuxAi.orphanedTerminal",
           "group": "inline"
         }
       ]

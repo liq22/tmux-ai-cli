@@ -1,8 +1,9 @@
 import * as vscode from "vscode";
 
 import { CliSessionInfo, CliTypeInfo } from "../cli/protocol";
+import { OrphanedTerminalInfo } from "../terminal/manager";
 
-export type TreeNode = TypeNode | SessionNode | MessageNode;
+export type TreeNode = TypeNode | SessionNode | OrphanedGroupNode | OrphanedTerminalNode | MessageNode;
 
 export interface TypeNode {
   kind: "type";
@@ -17,10 +18,19 @@ export interface SessionNode {
   typeInfo: CliTypeInfo;
 }
 
+export interface OrphanedGroupNode {
+  kind: "orphanedGroup";
+  terminals: OrphanedTerminalInfo[];
+}
+
+export interface OrphanedTerminalNode {
+  kind: "orphanedTerminal";
+  info: OrphanedTerminalInfo;
+}
+
 export interface MessageNode {
   kind: "message";
   label: string;
   description?: string;
   command?: vscode.Command;
 }
-
