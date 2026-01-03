@@ -1,0 +1,96 @@
+{
+  "name": "vscode-tmux-ai",
+  "displayName": "Tmux AI",
+  "description": "Production-grade VS Code integration for tmux-ai-cli (multi-session, multi-client, passive sync).",
+  "version": "0.0.1",
+  "publisher": "tmux-ai",
+  "engines": {
+    "vscode": "^1.87.0"
+  },
+  "categories": [
+    "Other"
+  ],
+  "main": "./dist/extension.js",
+  "activationEvents": [
+    "onCommand:tmuxAi.refresh",
+    "onCommand:tmuxAi.selectCliPath"
+  ],
+  "contributes": {
+    "commands": [
+      {
+        "command": "tmuxAi.refresh",
+        "title": "Tmux AI: Refresh Sessions"
+      },
+      {
+        "command": "tmuxAi.selectCliPath",
+        "title": "Tmux AI: Select CLI Path"
+      }
+    ],
+    "configuration": {
+      "title": "Tmux AI",
+      "properties": {
+        "tmuxAi.cliPath": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "default": null,
+          "description": "Path to the tmux-ai-cli executable (ai)."
+        },
+        "tmuxAi.discovery.searchPaths": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "default": [
+            "~/.local/bin/ai",
+            "~/bin/ai",
+            "/usr/local/bin/ai",
+            "/usr/bin/ai"
+          ],
+          "description": "Candidate paths to probe when tmuxAi.cliPath is not set."
+        },
+        "tmuxAi.namingPattern": {
+          "type": "string",
+          "default": "{type}-{n}",
+          "description": "Auto naming pattern used by the extension when creating sessions."
+        },
+        "tmuxAi.passiveSync.enabled": {
+          "type": "boolean",
+          "default": true,
+          "description": "Refresh sessions silently when VS Code regains focus."
+        },
+        "tmuxAi.terminal.nameFormat": {
+          "type": "string",
+          "default": "AI: {shortName}",
+          "description": "Terminal name format for the primary client."
+        },
+        "tmuxAi.terminal.multiClientNameFormat": {
+          "type": "string",
+          "default": "AI: {shortName} ({k})",
+          "description": "Terminal name format for additional clients (k starts from 2)."
+        },
+        "tmuxAi.terminal.useProfileFallback": {
+          "type": "boolean",
+          "default": false,
+          "description": "Allow writing workspace .vscode/settings.json as a fallback for terminal appearance."
+        },
+        "tmuxAi.debug": {
+          "type": "boolean",
+          "default": false,
+          "description": "Enable debug logs in the extension."
+        }
+      }
+    }
+  },
+  "scripts": {
+    "compile": "tsc -p .",
+    "watch": "tsc -watch -p ."
+  },
+  "devDependencies": {
+    "@types/node": "^20.0.0",
+    "@types/vscode": "^1.87.0",
+    "typescript": "^5.0.0"
+  }
+}
+
