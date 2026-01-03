@@ -8,6 +8,7 @@ import { registerOrphanedCommands } from "./commands/orphaned";
 import { registerCreateSessionCommand } from "./commands/createSession";
 import { SessionsTreeProvider } from "./tree/provider";
 import { TerminalManager } from "./terminal/manager";
+import { ensureWorkspaceTerminalFallbackSettings } from "./workspace/fallbackSettings";
 
 function getRunner(cliPath: string) {
   const cfg = readConfig();
@@ -17,7 +18,16 @@ function getRunner(cliPath: string) {
 export function activate(context: vscode.ExtensionContext): void {
   const terminalManager = new TerminalManager();
   const provider = new SessionsTreeProvider(terminalManager);
+  void vscode.commands.executeCommand("setContext", "tmuxAi.degraded", false);
   context.subscriptions.push(vscode.window.registerTreeDataProvider("tmuxAi.sessions", provider));
+
+  context.subscriptions.push(
+    vscode.workspace.onDidChangeConfiguration((e) => {
+      if (e.affectsConfiguration("tmuxAi.terminal.useProfileFallback")) {
+        void ensureWorkspaceTerminalFallbackSettings();
+      }
+    }),
+  );
 
   context.subscriptions.push(
     vscode.commands.registerCommand("tmuxAi.selectCliPath", async () => {
@@ -64,6 +74,7 @@ export function activate(context: vscode.ExtensionContext): void {
     }),
   );
 
+  void ensureWorkspaceTerminalFallbackSettings();
   void provider.reload({ interactive: false, silent: true });
 }
 

@@ -21,6 +21,10 @@ export function registerCreateSessionCommand(
       if (creating) return;
       creating = true;
       try {
+        if (provider.isDegraded()) {
+          vscode.window.showErrorMessage(provider.getDegradedHint() ?? "CLI incompatible (degraded mode).");
+          return;
+        }
         const cfg = readConfig();
         const cliPath = await ensureCliPath(true);
         if (!cliPath) return;
@@ -91,4 +95,3 @@ export function registerCreateSessionCommand(
     }),
   );
 }
-

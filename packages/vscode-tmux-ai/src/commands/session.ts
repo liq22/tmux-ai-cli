@@ -47,6 +47,10 @@ export function registerSessionCommands(
   context.subscriptions.push(
     vscode.commands.registerCommand("tmuxAi.session.connect", async (node: SessionNode) => {
       try {
+        if (provider.isDegraded()) {
+          vscode.window.showErrorMessage(provider.getDegradedHint() ?? "CLI incompatible (degraded mode).");
+          return;
+        }
         if (!node?.session?.shortName) return;
 
         const shortName = node.session.shortName;
@@ -85,6 +89,10 @@ export function registerSessionCommands(
   context.subscriptions.push(
     vscode.commands.registerCommand("tmuxAi.session.newClient", async (node: SessionNode) => {
       try {
+        if (provider.isDegraded()) {
+          vscode.window.showErrorMessage(provider.getDegradedHint() ?? "CLI incompatible (degraded mode).");
+          return;
+        }
         if (!node?.session?.shortName) return;
 
         const shortName = node.session.shortName;
@@ -123,6 +131,10 @@ export function registerSessionCommands(
   context.subscriptions.push(
     vscode.commands.registerCommand("tmuxAi.session.rename", async (node: SessionNode) => {
       try {
+        if (provider.isDegraded()) {
+          vscode.window.showErrorMessage(provider.getDegradedHint() ?? "CLI incompatible (degraded mode).");
+          return;
+        }
         if (!node?.session?.shortName) return;
 
         const oldShortName = node.session.shortName;
@@ -191,6 +203,10 @@ export function registerSessionCommands(
   context.subscriptions.push(
     vscode.commands.registerCommand("tmuxAi.session.kill", async (node: SessionNode) => {
       try {
+        if (provider.isDegraded()) {
+          vscode.window.showErrorMessage(provider.getDegradedHint() ?? "CLI incompatible (degraded mode).");
+          return;
+        }
         if (!node?.session?.shortName) return;
 
         const shortName = node.session.shortName;
@@ -243,6 +259,10 @@ export function registerSessionCommands(
   context.subscriptions.push(
     vscode.commands.registerCommand("tmuxAi.session.detachAll", async (node: SessionNode) => {
       try {
+        if (provider.isDegraded()) {
+          vscode.window.showErrorMessage(provider.getDegradedHint() ?? "CLI incompatible (degraded mode).");
+          return;
+        }
         if (!node?.session?.shortName) return;
 
         const shortName = node.session.shortName;

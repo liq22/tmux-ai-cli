@@ -129,7 +129,7 @@
         },
         {
           "command": "tmuxAi.session.create",
-          "when": "view == tmuxAi.sessions",
+          "when": "view == tmuxAi.sessions && !tmuxAi.degraded",
           "group": "navigation"
         },
         {
@@ -141,32 +141,32 @@
       "view/item/context": [
         {
           "command": "tmuxAi.session.create",
-          "when": "view == tmuxAi.sessions && viewItem == tmuxAi.type",
+          "when": "view == tmuxAi.sessions && viewItem == tmuxAi.type && !tmuxAi.degraded",
           "group": "inline"
         },
         {
           "command": "tmuxAi.session.connect",
-          "when": "view == tmuxAi.sessions && viewItem == tmuxAi.session",
+          "when": "view == tmuxAi.sessions && viewItem == tmuxAi.session && !tmuxAi.degraded",
           "group": "inline"
         },
         {
           "command": "tmuxAi.session.newClient",
-          "when": "view == tmuxAi.sessions && viewItem == tmuxAi.session",
+          "when": "view == tmuxAi.sessions && viewItem == tmuxAi.session && !tmuxAi.degraded",
           "group": "inline"
         },
         {
           "command": "tmuxAi.session.rename",
-          "when": "view == tmuxAi.sessions && viewItem == tmuxAi.session",
+          "when": "view == tmuxAi.sessions && viewItem == tmuxAi.session && !tmuxAi.degraded",
           "group": "inline"
         },
         {
           "command": "tmuxAi.session.detachAll",
-          "when": "view == tmuxAi.sessions && viewItem == tmuxAi.session",
+          "when": "view == tmuxAi.sessions && viewItem == tmuxAi.session && !tmuxAi.degraded",
           "group": "inline"
         },
         {
           "command": "tmuxAi.session.kill",
-          "when": "view == tmuxAi.sessions && viewItem == tmuxAi.session",
+          "when": "view == tmuxAi.sessions && viewItem == tmuxAi.session && !tmuxAi.degraded",
           "group": "inline"
         },
         {

@@ -31,6 +31,7 @@ CLI contract reference: `docs/cli-contract.md`.
   - Rename / Detach All / Kill
 - **Passive Sync**: refresh silently when VS Code regains focus (`tmuxAi.passiveSync.enabled`).
 - **Orphaned terminals**: terminals whose names match the AI naming format but no longer exist in `ai list` are shown under **Orphaned**, with one-click cleanup.
+- **Degraded mode**: if CLI protocol is incompatible (wrong `protocolVersion` or non-JSON output), dangerous commands are disabled until the CLI is updated.
 
 ## Configuration
 
@@ -40,6 +41,7 @@ CLI contract reference: `docs/cli-contract.md`.
 - `tmuxAi.terminal.nameFormat`: default `AI: {shortName}`
 - `tmuxAi.terminal.multiClientNameFormat`: default `AI: {shortName} ({k})`
 - `tmuxAi.confirm.destructiveActions`: confirm before kill/detach/cleanup
+- `tmuxAi.terminal.useProfileFallback`: when enabled, the extension may write workspace-level terminal tab settings (no global settings changes)
 - `tmuxAi.debug`: extra logs from the extension
 
 ## Build / Package
@@ -59,4 +61,3 @@ vsce package
 ```
 
 Install the generated `.vsix` via **Extensions → ⋯ → Install from VSIX…**
-

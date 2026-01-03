@@ -4,6 +4,7 @@ import { readConfig } from "../config";
 import { ensureCliPath } from "../discovery";
 import { getCliRunner } from "../cli/factory";
 import { CliListOk, CliSessionInfo } from "../cli/protocol";
+import { CliExecError, CliProtocolError } from "../cli/runner";
 import { TerminalManager } from "../terminal/manager";
 
 import { MessageNode, OrphanedGroupNode, OrphanedTerminalNode, SessionNode, TreeNode, TypeNode } from "./items";
@@ -15,13 +16,46 @@ export class SessionsTreeProvider implements vscode.TreeDataProvider<TreeNode> {
 
   private listCache: CliListOk | null = null;
   private lastError: Error | null = null;
+  private degraded = false;
+  private degradedHint: string | null = null;
 
   constructor(private readonly terminalManager: TerminalManager) {}
+
+  isDegraded(): boolean {
+    return this.degraded;
+  }
+
+  getDegradedHint(): string | null {
+    return this.degradedHint;
+  }
+
+  private setDegraded(value: boolean, hint: string | null): void {
+    this.degraded = value;
+    this.degradedHint = hint;
+    void vscode.commands.executeCommand("setContext", "tmuxAi.degraded", value);
+  }
+
+  private computeDegradedState(err: Error): { degraded: boolean; hint: string | null } {
+    if (err instanceof CliProtocolError) {
+      return {
+        degraded: true,
+        hint: "tmux-ai-cli protocolVersion 不兼容；请更新 tmux-ai-cli（重新运行 install.sh 或 git pull 后重装）。",
+      };
+    }
+    if (err instanceof CliExecError && err.message.includes("did not return valid JSON")) {
+      return {
+        degraded: true,
+        hint: "tmux-ai-cli 未返回 JSON（可能是旧版 CLI 或 cliPath 指向了非 tmux-ai-cli 可执行文件）。",
+      };
+    }
+    return { degraded: false, hint: null };
+  }
 
   refresh(): void {
     this.listCache = null;
     this.lastError = null;
     void vscode.commands.executeCommand("setContext", "tmuxAi.hasOrphaned", false);
+    this.setDegraded(false, null);
     this.onDidChangeTreeDataEmitter.fire(undefined);
   }
 
@@ -40,6 +74,7 @@ export class SessionsTreeProvider implements vscode.TreeDataProvider<TreeNode> {
         this.listCache = null;
         this.lastError = null;
         void vscode.commands.executeCommand("setContext", "tmuxAi.hasOrphaned", false);
+        this.setDegraded(false, null);
         this.onDidChangeTreeDataEmitter.fire(undefined);
         return;
       }
@@ -47,11 +82,14 @@ export class SessionsTreeProvider implements vscode.TreeDataProvider<TreeNode> {
       this.listCache = await runner.list();
       this.terminalManager.rehydrate(this.listCache.sessions);
       void vscode.commands.executeCommand("setContext", "tmuxAi.hasOrphaned", this.terminalManager.getOrphaned().length > 0);
+      this.setDegraded(false, null);
       this.lastError = null;
       this.onDidChangeTreeDataEmitter.fire(undefined);
     } catch (err) {
       this.listCache = null;
       this.lastError = err instanceof Error ? err : new Error(String(err));
+      const degraded = this.computeDegradedState(this.lastError);
+      this.setDegraded(degraded.degraded, degraded.hint);
       this.onDidChangeTreeDataEmitter.fire(undefined);
       if (!options.silent) {
         vscode.window.showErrorMessage(`Tmux AI refresh failed: ${this.lastError.message}`);
@@ -136,6 +174,7 @@ export class SessionsTreeProvider implements vscode.TreeDataProvider<TreeNode> {
     const cliPath = await ensureCliPath(false);
     if (!cliPath) {
       void vscode.commands.executeCommand("setContext", "tmuxAi.hasOrphaned", false);
+      this.setDegraded(false, null);
       const node: MessageNode = {
         kind: "message",
         label: "Configure tmuxAi.cliPath",
@@ -151,9 +190,22 @@ export class SessionsTreeProvider implements vscode.TreeDataProvider<TreeNode> {
         this.listCache = await runner.list();
         this.terminalManager.rehydrate(this.listCache.sessions);
         void vscode.commands.executeCommand("setContext", "tmuxAi.hasOrphaned", this.terminalManager.getOrphaned().length > 0);
+        this.setDegraded(false, null);
       } catch (err) {
         this.lastError = err instanceof Error ? err : new Error(String(err));
+        const degraded = this.computeDegradedState(this.lastError);
+        this.setDegraded(degraded.degraded, degraded.hint);
       }
+    }
+
+    if (this.degraded) {
+      const node: MessageNode = {
+        kind: "message",
+        label: "CLI incompatible (degraded mode)",
+        description: this.degradedHint ?? "Please update tmux-ai-cli and refresh.",
+        command: { command: "tmuxAi.selectCliPath", title: "Select CLI Path" },
+      };
+      return [node];
     }
 
     if (this.lastError) {
