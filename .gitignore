@@ -12,3 +12,7 @@ Thumbs.db
 # 临时文件
 *.tmp
 *.log
+
+# VS Code extension artifacts
+packages/vscode-tmux-ai/node_modules/
+packages/vscode-tmux-ai/dist/
