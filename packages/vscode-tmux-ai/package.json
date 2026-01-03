@@ -228,7 +228,7 @@
         "tmuxAi.terminal.useProfileFallback": {
           "type": "boolean",
           "default": false,
-          "description": "Allow writing workspace .vscode/settings.json as a fallback for terminal appearance."
+          "description": "Allow writing workspace-level terminal settings (tabs + auto-generated per-session terminal profiles)."
         },
         "tmuxAi.confirm.destructiveActions": {
           "type": "boolean",

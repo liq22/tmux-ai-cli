@@ -19,10 +19,17 @@ export class SessionsTreeProvider implements vscode.TreeDataProvider<TreeNode> {
   private degraded = false;
   private degradedHint: string | null = null;
 
-  constructor(private readonly terminalManager: TerminalManager) {}
+  constructor(
+    private readonly terminalManager: TerminalManager,
+    private readonly onListUpdated?: (event: { list: CliListOk; cliPath: string }) => void | Promise<void>,
+  ) {}
 
   isDegraded(): boolean {
     return this.degraded;
+  }
+
+  getLatestList(): CliListOk | null {
+    return this.listCache;
   }
 
   getDegradedHint(): string | null {
@@ -84,6 +91,10 @@ export class SessionsTreeProvider implements vscode.TreeDataProvider<TreeNode> {
       void vscode.commands.executeCommand("setContext", "tmuxAi.hasOrphaned", this.terminalManager.getOrphaned().length > 0);
       this.setDegraded(false, null);
       this.lastError = null;
+      void Promise.resolve(this.onListUpdated?.({ list: this.listCache, cliPath })).catch((e) => {
+        const msg = e instanceof Error ? e.message : String(e);
+        console.error(`workspace fallback sync failed: ${msg}`);
+      });
       this.onDidChangeTreeDataEmitter.fire(undefined);
     } catch (err) {
       this.listCache = null;
@@ -191,6 +202,10 @@ export class SessionsTreeProvider implements vscode.TreeDataProvider<TreeNode> {
         this.terminalManager.rehydrate(this.listCache.sessions);
         void vscode.commands.executeCommand("setContext", "tmuxAi.hasOrphaned", this.terminalManager.getOrphaned().length > 0);
         this.setDegraded(false, null);
+        void Promise.resolve(this.onListUpdated?.({ list: this.listCache, cliPath })).catch((e) => {
+          const msg = e instanceof Error ? e.message : String(e);
+          console.error(`workspace fallback sync failed: ${msg}`);
+        });
       } catch (err) {
         this.lastError = err instanceof Error ? err : new Error(String(err));
         const degraded = this.computeDegradedState(this.lastError);
