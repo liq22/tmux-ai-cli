@@ -531,8 +531,12 @@ emit_types_lines() {
 }
 
 emit_sessions_lines() {
-  local sessions
-  sessions="$(get_instance_sessions)"
+  local sessions=""
+  if [ "$#" -gt 0 ]; then
+    sessions="${1-}"
+  else
+    sessions="$(get_instance_sessions)"
+  fi
   if [ -z "$sessions" ]; then
     return
   fi
@@ -557,8 +561,21 @@ cmd_list_json() {
     return 1
   fi
 
+  local list_out rc=0 instance_sessions=""
+  list_out="$("${TMUX_CMD[@]}" list-sessions -F '#{session_name}' 2>&1)" || rc=$?
+  if [ "$rc" -ne 0 ]; then
+    if printf '%s' "$list_out" | grep -qi 'no server running on'; then
+      instance_sessions=""
+    else
+      json_error "E_TMUX_FAILED" "tmux list-sessions failed" "$list_out"
+      return 1
+    fi
+  else
+    instance_sessions="$(printf '%s\n' "$list_out" | grep -E "^${SESSION_PREFIX}-" | grep -v "^${MASTER_SESSION}$" | sort || true)"
+  fi
+
   if has_python3; then
-    { emit_types_lines; emit_sessions_lines; } | python3 -c '
+    { emit_types_lines; emit_sessions_lines "$instance_sessions"; } | python3 -c '
 import json, sys
 from datetime import datetime, timezone
 
@@ -652,7 +669,7 @@ print(json.dumps(obj, ensure_ascii=False))
       "$(json_escape_bash "$(epoch_to_iso_fallback "$created_epoch")")" \
       "$(json_escape_bash "$(epoch_to_iso_fallback "$last_used_epoch")")" \
       "$(json_escape_bash "$window_name")"
-  done < <(emit_sessions_lines || true)
+  done < <(emit_sessions_lines "$instance_sessions" || true)
   printf '],"now":"%s"}\n' "$(json_escape_bash "$now")"
 }
 
@@ -886,7 +903,14 @@ cmd_attach_json() {
 
   local session
   session="$(tmux_session_from_short_name "$short_name")"
-  if ! "${TMUX_CMD[@]}" has-session -t "$session" 2>/dev/null; then
+
+  local list_out rc=0
+  list_out="$("${TMUX_CMD[@]}" list-sessions -F '#{session_name}' 2>&1)" || rc=$?
+  if [ "$rc" -ne 0 ]; then
+    json_error "E_TMUX_FAILED" "tmux list-sessions failed" "$list_out"
+    return 1
+  fi
+  if ! printf '%s\n' "$list_out" | grep -qx "$session"; then
     json_error "E_SESSION_NOT_FOUND" "session 不存在: $short_name" "先创建：ai new --json --type <typeId>"
     return 1
   fi
