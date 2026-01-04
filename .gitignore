@@ -1,14 +1,11 @@
 # 编辑器
-.vscode/
+.vscode/*
+!.vscode/launch.json
+!.vscode/tasks.json
 .idea/
 *.swp
 *.swo
 *~
-
-# Allow committing extension debug configs
-!packages/vscode-tmux-ai/.vscode/
-!packages/vscode-tmux-ai/.vscode/launch.json
-!packages/vscode-tmux-ai/.vscode/tasks.json
 
 # 系统文件
 .DS_Store

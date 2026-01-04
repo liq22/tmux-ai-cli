@@ -7,11 +7,11 @@
       "request": "launch",
       "runtimeExecutable": "${execPath}",
       "args": [
-        "--extensionDevelopmentPath=${workspaceFolder}",
-        "${workspaceFolder}/../.."
+        "--extensionDevelopmentPath=${workspaceFolder}/packages/vscode-tmux-ai",
+        "${workspaceFolder}"
       ],
       "outFiles": [
-        "${workspaceFolder}/dist/**/*.js"
+        "${workspaceFolder}/packages/vscode-tmux-ai/dist/**/*.js"
       ],
       "preLaunchTask": "tmux-ai: compile extension",
       "env": {
@@ -20,4 +20,3 @@
     }
   ]
 }
-

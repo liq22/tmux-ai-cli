@@ -5,7 +5,7 @@
       "label": "tmux-ai: compile extension",
       "type": "npm",
       "script": "compile",
-      "path": ".",
+      "path": "packages/vscode-tmux-ai",
       "problemMatcher": [
         "$tsc"
       ],
@@ -18,7 +18,7 @@
       "label": "tmux-ai: watch extension",
       "type": "npm",
       "script": "watch",
-      "path": ".",
+      "path": "packages/vscode-tmux-ai",
       "isBackground": true,
       "problemMatcher": [
         "$tsc-watch"
