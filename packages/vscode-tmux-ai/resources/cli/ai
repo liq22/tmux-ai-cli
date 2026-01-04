@@ -165,6 +165,28 @@ detect_tmux_backend() {
   fi
 
   local best_base="" best_socket="" best_count=0 best_master=0 best_rank=0 best_sessions=""
+  local best_superset_base="" best_superset_socket="" best_superset_count=0 best_superset_master=0 best_superset_rank=0 best_superset_sessions=""
+
+  is_better_candidate() {
+    local count="$1" master="$2" rank="$3"
+    local best_count_="$4" best_master_="$5" best_rank_="$6"
+    if [ "$count" -gt "$best_count_" ]; then
+      return 0
+    fi
+    if [ "$count" -lt "$best_count_" ]; then
+      return 1
+    fi
+    if [ "$master" -gt "$best_master_" ]; then
+      return 0
+    fi
+    if [ "$master" -lt "$best_master_" ]; then
+      return 1
+    fi
+    if [ "$rank" -gt "$best_rank_" ]; then
+      return 0
+    fi
+    return 1
+  }
 
   for base in "${bases[@]}"; do
     local socket_dir="$base/tmux-$uid"
@@ -183,15 +205,24 @@ detect_tmux_backend() {
       fi
       rank="$(socket_rank "$sock")"
 
-      if [ "$count" -gt "$best_count" ] ||
-        { [ "$count" -eq "$best_count" ] && [ "$master" -gt "$best_master" ]; } ||
-        { [ "$count" -eq "$best_count" ] && [ "$master" -eq "$best_master" ] && [ "$rank" -gt "$best_rank" ]; }; then
+      if is_better_candidate "$count" "$master" "$rank" "$best_count" "$best_master" "$best_rank"; then
         best_base="$base"
         best_socket="$sock"
         best_count="$count"
         best_master="$master"
         best_rank="$rank"
         best_sessions="$sessions"
+      fi
+
+      if [ "$current_count" -gt 0 ] && is_subset_sessions "$current_sessions" "$sessions"; then
+        if is_better_candidate "$count" "$master" "$rank" "$best_superset_count" "$best_superset_master" "$best_superset_rank"; then
+          best_superset_base="$base"
+          best_superset_socket="$sock"
+          best_superset_count="$count"
+          best_superset_master="$master"
+          best_superset_rank="$rank"
+          best_superset_sessions="$sessions"
+        fi
       fi
       continue
     fi
@@ -212,9 +243,7 @@ detect_tmux_backend() {
       fi
       rank="$(socket_rank "$sock")"
 
-      if [ "$count" -gt "$best_count" ] ||
-        { [ "$count" -eq "$best_count" ] && [ "$master" -gt "$best_master" ]; } ||
-        { [ "$count" -eq "$best_count" ] && [ "$master" -eq "$best_master" ] && [ "$rank" -gt "$best_rank" ]; }; then
+      if is_better_candidate "$count" "$master" "$rank" "$best_count" "$best_master" "$best_rank"; then
         best_base="$base"
         best_socket="$sock"
         best_count="$count"
@@ -222,28 +251,48 @@ detect_tmux_backend() {
         best_rank="$rank"
         best_sessions="$sessions"
       fi
+
+      if [ "$current_count" -gt 0 ] && is_subset_sessions "$current_sessions" "$sessions"; then
+        if is_better_candidate "$count" "$master" "$rank" "$best_superset_count" "$best_superset_master" "$best_superset_rank"; then
+          best_superset_base="$base"
+          best_superset_socket="$sock"
+          best_superset_count="$count"
+          best_superset_master="$master"
+          best_superset_rank="$rank"
+          best_superset_sessions="$sessions"
+        fi
+      fi
     done
   done
 
-  if [ -z "$best_socket" ] || [ "$best_count" -eq 0 ]; then
-    return 0
-  fi
-
   local should_switch=0
+  local chosen_socket="" chosen_base=""
   if [ "$current_count" -eq 0 ]; then
+    if [ -z "$best_socket" ] || [ "$best_count" -eq 0 ]; then
+      return 0
+    fi
     should_switch=1
-  elif [ "$best_count" -gt "$current_count" ]; then
-    if is_subset_sessions "$current_sessions" "$best_sessions"; then
+    chosen_socket="$best_socket"
+    chosen_base="$best_base"
+  else
+    if [ -z "$best_superset_socket" ] || [ "$best_superset_count" -eq 0 ]; then
+      return 0
+    fi
+    if [ "$best_superset_count" -gt "$current_count" ]; then
+      should_switch=1
+    elif [ "$best_superset_base" != "$current_base" ] || [ "$best_superset_socket" != "$current_socket" ]; then
       should_switch=1
     fi
+    chosen_socket="$best_superset_socket"
+    chosen_base="$best_superset_base"
   fi
 
   if [ "$should_switch" -eq 1 ]; then
     if [ "$socket_fixed" -eq 0 ]; then
-      TMUX_SOCKET="$best_socket"
+      TMUX_SOCKET="$chosen_socket"
     fi
     if [ "$tmp_fixed" -eq 0 ]; then
-      export TMUX_TMPDIR="$best_base"
+      export TMUX_TMPDIR="$chosen_base"
     fi
     log_debug "auto-detected tmux backend: socket=${TMUX_SOCKET}; TMUX_TMPDIR=${TMUX_TMPDIR:-<unset>}"
   else

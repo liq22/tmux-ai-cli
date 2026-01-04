@@ -124,7 +124,9 @@ export function registerCliInstallerCommands(
   provider: SessionsTreeProvider,
 ): void {
   context.subscriptions.push(
-    vscode.commands.registerCommand("tmuxAi.cli.installBundled", async (options?: { silent?: boolean }) => {
+    vscode.commands.registerCommand(
+      "tmuxAi.cli.installBundled",
+      async (options?: { silent?: boolean; force?: boolean }) => {
       if (process.platform === "win32") {
         vscode.window.showErrorMessage("Bundled CLI install is not supported on Windows. Use WSL/Remote or install manually.");
         return;
@@ -134,7 +136,7 @@ export function registerCliInstallerCommands(
       const currentCliPath = cfg.cliPath;
 
       let updatePath = true;
-      if (currentCliPath && (await isExecutableFile(currentCliPath))) {
+      if (!options?.force && currentCliPath && (await isExecutableFile(currentCliPath))) {
         const action = await vscode.window.showInformationMessage(
           `tmuxAi.cliPath 已配置: ${currentCliPath}`,
           "Switch to bundled",
@@ -174,7 +176,8 @@ export function registerCliInstallerCommands(
       } else if (action === "Open CLI Config") {
         await vscode.commands.executeCommand("tmuxAi.cli.openConfig");
       }
-    }),
+      },
+    ),
   );
 
   context.subscriptions.push(

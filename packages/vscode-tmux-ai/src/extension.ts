@@ -21,6 +21,14 @@ function getRunner(cliPath: string) {
   return getCliRunner(cliPath, { debug: cfg.debug, envOverrides: getCliEnvOverrides(cfg) });
 }
 
+function buffersEqual(a: Uint8Array, b: Uint8Array): boolean {
+  if (a.byteLength !== b.byteLength) return false;
+  for (let i = 0; i < a.byteLength; i++) {
+    if (a[i] !== b[i]) return false;
+  }
+  return true;
+}
+
 export function activate(context: vscode.ExtensionContext): void {
   const terminalManager = new TerminalManager();
   let autoDetectInProgress = false;
@@ -195,6 +203,24 @@ export function activate(context: vscode.ExtensionContext): void {
     if (!shouldManageBundled) return;
 
     const cliPath = await ensureCliPath(false);
+    if (cliPath && cliPath === bundledCliPath) {
+      try {
+        const installedUri = vscode.Uri.file(bundledCliPath);
+        const bundledUri = vscode.Uri.joinPath(context.extensionUri, "resources", "cli", "ai");
+        const [installedBytes, bundledBytes] = await Promise.all([
+          vscode.workspace.fs.readFile(installedUri),
+          vscode.workspace.fs.readFile(bundledUri),
+        ]);
+        if (!buffersEqual(installedBytes, bundledBytes)) {
+          await vscode.commands.executeCommand("tmuxAi.cli.installBundled", { silent: true, force: true });
+        }
+      } catch (err) {
+        const message = err instanceof Error ? err.message : String(err);
+        console.error(`auto update bundled tmux-ai-cli failed: ${message}`);
+      }
+      return;
+    }
+
     if (cliPath) return;
 
     try {
