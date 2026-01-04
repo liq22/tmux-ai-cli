@@ -6,6 +6,7 @@ export interface TmuxAiConfig {
   cliPath: CliPath;
   cliSocket: string | null;
   cliConfigDir: string | null;
+  cliAutoInstallBundled: boolean;
   discoverySearchPaths: string[];
   namingPattern: string;
   passiveSyncEnabled: boolean;
@@ -21,10 +22,12 @@ export function readConfig(): TmuxAiConfig {
   const cliPath = cfg.get<string | null>("cliPath", null);
   const cliSocket = cfg.get<string | null>("cli.socket", null);
   const cliConfigDir = cfg.get<string | null>("cli.configDir", null);
+  const cliAutoInstallBundled = cfg.get<boolean>("cli.autoInstallBundled", true);
   return {
     cliPath: cliPath && cliPath.trim().length > 0 ? cliPath.trim() : null,
     cliSocket: cliSocket && cliSocket.trim().length > 0 ? cliSocket.trim() : null,
     cliConfigDir: cliConfigDir && cliConfigDir.trim().length > 0 ? cliConfigDir.trim() : null,
+    cliAutoInstallBundled,
     discoverySearchPaths: cfg.get<string[]>("discovery.searchPaths", []),
     namingPattern: cfg.get<string>("namingPattern", "{type}-{n}"),
     passiveSyncEnabled: cfg.get<boolean>("passiveSync.enabled", true),

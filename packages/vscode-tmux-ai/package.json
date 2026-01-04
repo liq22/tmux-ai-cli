@@ -2,7 +2,7 @@
   "name": "vscode-tmux-ai",
   "displayName": "Tmux AI",
   "description": "Production-grade VS Code integration for tmux-ai-cli (multi-session, multi-client, passive sync).",
-  "version": "0.0.3",
+  "version": "0.0.4",
   "publisher": "tmux-ai",
   "repository": {
     "type": "git",
@@ -247,6 +247,11 @@
           ],
           "default": null,
           "description": "Optional override for TMUX_AI_CONFIG when running tmux-ai-cli."
+        },
+        "tmuxAi.cli.autoInstallBundled": {
+          "type": "boolean",
+          "default": true,
+          "description": "Automatically install the bundled tmux-ai-cli into VS Code global storage when the CLI is missing."
         },
         "tmuxAi.discovery.searchPaths": {
           "type": "array",

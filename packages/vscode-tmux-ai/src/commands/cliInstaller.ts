@@ -53,8 +53,8 @@ async function copyBundledFile(context: vscode.ExtensionContext, fileName: strin
   await vscode.workspace.fs.writeFile(dest, content);
 }
 
-async function chmodIfFileUri(uri: vscode.Uri, mode: number): Promise<void> {
-  if (uri.scheme !== "file") return;
+async function chmodIfPossible(uri: vscode.Uri, mode: number): Promise<void> {
+  if (!uri.fsPath) return;
   try {
     await fs.chmod(uri.fsPath, mode);
   } catch {
@@ -93,8 +93,8 @@ async function installBundledCli(context: vscode.ExtensionContext): Promise<{
 
   await copyBundledFile(context, "ai", aiUri);
   await copyBundledFile(context, "ai-tmux", aiTmuxUri);
-  await chmodIfFileUri(aiUri, 0o755);
-  await chmodIfFileUri(aiTmuxUri, 0o755);
+  await chmodIfPossible(aiUri, 0o755);
+  await chmodIfPossible(aiTmuxUri, 0o755);
 
   const cfg = readConfig();
   if (cfg.cliConfigDir) {
@@ -123,7 +123,7 @@ export function registerCliInstallerCommands(
   provider: SessionsTreeProvider,
 ): void {
   context.subscriptions.push(
-    vscode.commands.registerCommand("tmuxAi.cli.installBundled", async () => {
+    vscode.commands.registerCommand("tmuxAi.cli.installBundled", async (options?: { silent?: boolean }) => {
       if (process.platform === "win32") {
         vscode.window.showErrorMessage("Bundled CLI install is not supported on Windows. Use WSL/Remote or install manually.");
         return;
@@ -159,7 +159,9 @@ export function registerCliInstallerCommands(
         },
       );
 
-      await provider.reload({ interactive: false, silent: false });
+      await provider.reload({ interactive: false, silent: options?.silent ?? false });
+
+      if (options?.silent) return;
 
       const action = await vscode.window.showInformationMessage(
         "Bundled tmux-ai-cli 已安装并可用于扩展。",
@@ -214,4 +216,3 @@ export function registerCliInstallerCommands(
     }),
   );
 }
-

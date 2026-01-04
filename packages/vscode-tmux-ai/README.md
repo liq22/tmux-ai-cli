@@ -18,7 +18,8 @@ CLI contract reference: `docs/cli-contract.md`.
 ## Getting Started
 
 1) Ensure `tmux-ai-cli` (`ai`) is available:
-   - Recommended: run `Tmux AI: Install tmux-ai-cli (Bundled)` (no `install.sh` needed; installs into VS Code global storage).
+   - Default: the extension auto-installs a bundled `ai` into VS Code global storage (`tmuxAi.cli.autoInstallBundled=true`).
+   - Manual: run `Tmux AI: Install tmux-ai-cli (Bundled)` (no `install.sh` needed).
    - Or install manually and ensure `ai` is executable in your environment.
 2) In VS Code, run:
    - `Tmux AI: Select CLI Path` (or set `tmuxAi.cliPath` manually)
@@ -41,6 +42,7 @@ CLI contract reference: `docs/cli-contract.md`.
 - `tmuxAi.cliPath`: path to `ai`
 - `tmuxAi.cli.socket`: override `TMUX_AI_SOCKET` for the extension (optional)
 - `tmuxAi.cli.configDir`: override `TMUX_AI_CONFIG` for the extension (optional)
+- `tmuxAi.cli.autoInstallBundled`: auto-install bundled `ai` into VS Code global storage when missing
 - `tmuxAi.discovery.searchPaths`: probe paths when `cliPath` is unset
 - `tmuxAi.passiveSync.enabled`: refresh on focus
 - `tmuxAi.terminal.nameFormat`: default `AI: {shortName}`
@@ -65,7 +67,7 @@ vsce package
 Then install the generated `.vsix`:
 
 - VS Code UI: **Extensions** → **⋯** → **Install from VSIX…**
-- VS Code CLI: `code --install-extension vscode-tmux-ai-0.0.3.vsix`
+- VS Code CLI: `code --install-extension vscode-tmux-ai-0.0.4.vsix`
 
 ## Debug
 

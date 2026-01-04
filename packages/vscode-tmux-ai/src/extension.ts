@@ -81,24 +81,21 @@ export function activate(context: vscode.ExtensionContext): void {
   registerCliInstallerCommands(context, provider);
 
   void (async () => {
-    const promptedKey = "tmuxAi.cli.installPrompted";
-    const prompted = context.globalState.get<boolean>(promptedKey) ?? false;
-    if (prompted) return;
+    const cfg = readConfig();
+    if (!cfg.cliAutoInstallBundled) return;
+
+    const bundledCliPath = vscode.Uri.joinPath(context.globalStorageUri, "tmux-ai-cli", "bin", "ai").fsPath;
+    const shouldManageBundled = !cfg.cliPath || cfg.cliPath === bundledCliPath;
+    if (!shouldManageBundled) return;
 
     const cliPath = await ensureCliPath(false);
-    if (cliPath) {
-      await context.globalState.update(promptedKey, true);
-      return;
-    }
+    if (cliPath) return;
 
-    const action = await vscode.window.showInformationMessage(
-      "tmux-ai-cli (ai) not found. Install the bundled CLI for this extension?",
-      "Install",
-      "Later",
-    );
-    await context.globalState.update(promptedKey, true);
-    if (action === "Install") {
-      await vscode.commands.executeCommand("tmuxAi.cli.installBundled");
+    try {
+      await vscode.commands.executeCommand("tmuxAi.cli.installBundled", { silent: true });
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      console.error(`auto install bundled tmux-ai-cli failed: ${message}`);
     }
   })();
 
