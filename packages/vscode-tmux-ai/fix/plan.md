@@ -47,6 +47,7 @@
 
 请在 **VS Code 命令面板**运行：
 - `Tmux AI: Diagnostics`（粘贴全部内容）
+  - 重点关注 `cliCwd`：它是扩展运行 `ai` 的工作目录，会影响 CLI 的 `$PWD/.tmux-tmp` 探测。
 
 并在 **VS Code 的集成终端**里跑（粘贴输出；关键是 stderr）：
 
@@ -149,4 +150,3 @@ tmux 的 stderr 往往会直接指出是哪一行配置错误或文件不可读�
 - 扩展诊断：`packages/vscode-tmux-ai/src/commands/diagnostics.ts`
 - 扩展 backend 探测：`packages/vscode-tmux-ai/src/commands/detectSocket.ts`、`packages/vscode-tmux-ai/src/extension.ts`
 - 说明文档：`packages/vscode-tmux-ai/fix/README.md`
-

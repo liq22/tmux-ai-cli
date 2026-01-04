@@ -57,7 +57,7 @@ export function registerCliConfigCommands(
         await updateCliPath(cliPath);
       }
 
-      await updateCliSocket("ai");
+      await updateCliSocket(null);
       await updateCliConfigDir(defaultConfigDir);
       await updateCliTmuxTmpDir(null);
 

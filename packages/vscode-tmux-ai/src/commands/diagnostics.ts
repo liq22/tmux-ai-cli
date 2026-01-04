@@ -1,3 +1,4 @@
+import * as os from "node:os";
 import * as vscode from "vscode";
 
 import { getCliRunner } from "../cli/factory";
@@ -32,6 +33,7 @@ export function registerDiagnosticsCommand(context: vscode.ExtensionContext): vo
       const cliPath = await ensureCliPath(true);
 
       const extVersion = String((context.extension.packageJSON as any)?.version ?? "<unknown>");
+      const cliCwd = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath ?? os.homedir();
 
       let listSummary: string;
       let altListSummary: string | null = null;
@@ -62,6 +64,7 @@ export function registerDiagnosticsCommand(context: vscode.ExtensionContext): vo
         "Tmux AI diagnostics",
         `- extensionVersion: ${extVersion}`,
         `- cliPath: ${cliPath ?? "<unset>"}`,
+        `- cliCwd: ${cliCwd}`,
         `- tmuxAi.cli.socket: ${cfg.cliSocket ?? "<unset>"}`,
         `- tmuxAi.cli.configDir: ${cfg.cliConfigDir ?? "<unset>"}`,
         `- tmuxAi.cli.tmuxTmpDir: ${cfg.cliTmuxTmpDir ?? "<unset>"}`,

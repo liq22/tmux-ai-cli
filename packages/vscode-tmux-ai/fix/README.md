@@ -24,6 +24,9 @@ tmux server 的“后端”由 socket 决定，而 socket 目录通常依赖：
 
 因此只要 VS Code Extension Host 和你的外部 shell 环境变量不同（尤其是 `TMUX_TMPDIR`），即使 `TMUX_AI_SOCKET=ai` 相同，也可能连接到 **不同的 tmux server**。
 
+另外还有一个常见“隐形差异”：`ai` 的后端探测会把 `$PWD/.tmux-tmp` 当作候选目录之一。
+如果你在命令行里习惯在项目根目录运行 `ai list`，但 VS Code Extension Host 运行 `ai` 时的工作目录（cwd）不是项目根目录，那么 `$PWD/.tmux-tmp` 指向的就不是同一个目录，结果也会连接到另一个 tmux server，表现为 **VS Code 里 0 sessions**。
+
 典型表现：
 - VS Code 里创建的 session 在外部 `ai list` 看不到（反之亦然）
 - VS Code 视图显示 `0 sessions`，但 Orphaned 里还有之前开的终端（因为它们来自另一个 backend）
@@ -54,6 +57,11 @@ tmux 会判定这是“嵌套 tmux”，常见报错为：
 - 改为探测并选择 `(TMUX_TMPDIR, TMUX_AI_SOCKET)` 组合，确保连接到正确 tmux server
 
 同时在 “0 sessions + orphaned terminals” 时自动探测一次（`tmuxAi.cli.autoDetectBackend=true`）。
+
+### 1.0) 扩展：固定 CLI 运行的 cwd（帮助 `$PWD/.tmux-tmp` 探测）
+
+扩展现在会用“当前工作区的第一个根目录”作为运行 `ai` 的 cwd（没有 workspace folder 时回退到 `$HOME`）。
+这能让 CLI 的 `$PWD/.tmux-tmp` 探测与你在项目目录运行 `ai` 的行为一致，从而减少 “VS Code 0 sessions，但 shell 有 sessions” 的概率。
 
 ### 1.1) 扩展：启动 tmux attach 时移除 `TMUX`
 
