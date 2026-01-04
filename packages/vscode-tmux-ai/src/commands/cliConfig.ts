@@ -4,7 +4,7 @@ import * as os from "node:os";
 import * as path from "node:path";
 import * as vscode from "vscode";
 
-import { readConfig, updateCliConfigDir, updateCliPath, updateCliSocket } from "../config";
+import { readConfig, updateCliConfigDir, updateCliPath, updateCliSocket, updateCliTmuxTmpDir } from "../config";
 import { pickCliPath } from "../discovery";
 import { SessionsTreeProvider } from "../tree/provider";
 
@@ -59,6 +59,7 @@ export function registerCliConfigCommands(
 
       await updateCliSocket("ai");
       await updateCliConfigDir(defaultConfigDir);
+      await updateCliTmuxTmpDir(null);
 
       await provider.reload({ interactive: false, silent: false });
 

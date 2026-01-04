@@ -17,7 +17,6 @@ else
 fi
 
 TMUX_SOCKET="${TMUX_AI_SOCKET:-ai}"
-TMUX_CMD=(tmux -f "$tmux_conf" -L "$TMUX_SOCKET")
 SESSION_PREFIX="ai"
 MASTER_SESSION="${SESSION_PREFIX}-master"
 PROTOCOL_VERSION=1
@@ -28,6 +27,239 @@ log_debug() {
     printf '[tmux-ai-cli] %s\n' "$*" >&2
   fi
 }
+
+expand_path() {
+  local p="${1:-}"
+  if [ -z "$p" ]; then
+    return 0
+  fi
+  if [ "$p" = "~" ]; then
+    printf '%s\n' "$HOME"
+    return 0
+  fi
+  if [[ "$p" == "~/"* ]]; then
+    printf '%s\n' "$HOME/${p#~/}"
+    return 0
+  fi
+  if [[ "$p" != /* ]]; then
+    printf '%s\n' "$(pwd)/$p"
+    return 0
+  fi
+  printf '%s\n' "$p"
+}
+
+count_backend_sessions() {
+  local base="${1:-}"
+  local socket="${2:-}"
+  local raw filtered
+
+  if [ -n "$base" ]; then
+    raw="$(TMUX_TMPDIR="$base" tmux -L "$socket" list-sessions -F '#{session_name}' 2>/dev/null || true)"
+  else
+    raw="$(tmux -L "$socket" list-sessions -F '#{session_name}' 2>/dev/null || true)"
+  fi
+
+  filtered="$(printf '%s\n' "$raw" | grep -E "^${SESSION_PREFIX}-" | grep -v "^${MASTER_SESSION}$" | sort || true)"
+  if [ -z "$filtered" ]; then
+    printf '0\n'
+    return 0
+  fi
+  printf '%s\n' "$filtered" | sed '/^$/d' | wc -l | tr -d ' '
+}
+
+list_backend_sessions() {
+  local base="${1:-}"
+  local socket="${2:-}"
+  local raw
+
+  if [ -n "$base" ]; then
+    raw="$(TMUX_TMPDIR="$base" tmux -L "$socket" list-sessions -F '#{session_name}' 2>/dev/null || true)"
+  else
+    raw="$(tmux -L "$socket" list-sessions -F '#{session_name}' 2>/dev/null || true)"
+  fi
+
+  printf '%s\n' "$raw" | grep -E "^${SESSION_PREFIX}-" | grep -v "^${MASTER_SESSION}$" | sort || true
+}
+
+has_backend_master() {
+  local base="${1:-}"
+  local socket="${2:-}"
+  if [ -n "$base" ]; then
+    TMUX_TMPDIR="$base" tmux -L "$socket" has-session -t "$MASTER_SESSION" 2>/dev/null
+    return $?
+  fi
+  tmux -L "$socket" has-session -t "$MASTER_SESSION" 2>/dev/null
+}
+
+socket_rank() {
+  case "${1:-}" in
+    ai) printf '2\n' ;;
+    default) printf '1\n' ;;
+    *) printf '0\n' ;;
+  esac
+}
+
+is_subset_sessions() {
+  local small="${1:-}"
+  local big="${2:-}"
+  [ -z "$small" ] && return 0
+  declare -A big_set=()
+  while read -r s; do
+    [ -z "$s" ] && continue
+    big_set["$s"]=1
+  done <<<"$big"
+  while read -r s; do
+    [ -z "$s" ] && continue
+    if [ -z "${big_set[$s]+x}" ]; then
+      return 1
+    fi
+  done <<<"$small"
+  return 0
+}
+
+detect_tmux_backend() {
+  local socket_fixed=0
+  local tmp_fixed=0
+  [ -n "${TMUX_AI_SOCKET:-}" ] && socket_fixed=1
+  [ -n "${TMUX_TMPDIR:-}" ] && tmp_fixed=1
+
+  local uid=""
+  uid="$(id -u 2>/dev/null || true)"
+  if [ -z "$uid" ]; then
+    return 0
+  fi
+
+  local current_base="${TMUX_TMPDIR:-}"
+  local current_socket="${TMUX_AI_SOCKET:-ai}"
+  local current_sessions current_count
+  current_sessions="$(list_backend_sessions "$current_base" "$current_socket")"
+  current_count="$(count_backend_sessions "$current_base" "$current_socket")"
+
+  local -a bases=()
+  declare -A seen=()
+  add_base() {
+    local b="${1:-}"
+    [ -z "$b" ] && return 0
+    b="$(expand_path "$b")"
+    b="${b%/}"
+    [ -z "$b" ] && return 0
+    if [ -n "${seen[$b]+x}" ]; then
+      return 0
+    fi
+    seen["$b"]=1
+    bases+=("$b")
+    return 0
+  }
+
+  if [ "$tmp_fixed" -eq 1 ]; then
+    add_base "${TMUX_TMPDIR}"
+  else
+    add_base "${TMPDIR:-}"
+    add_base "${TMP:-}"
+    add_base "${TEMP:-}"
+    add_base "${XDG_RUNTIME_DIR:-}"
+    add_base "$HOME/.tmux-tmp"
+    add_base "$PWD/.tmux-tmp"
+    add_base "/tmp"
+    add_base "/var/tmp"
+  fi
+
+  local best_base="" best_socket="" best_count=0 best_master=0 best_rank=0 best_sessions=""
+
+  for base in "${bases[@]}"; do
+    local socket_dir="$base/tmux-$uid"
+    [ -d "$socket_dir" ] || continue
+
+    if [ "$socket_fixed" -eq 1 ]; then
+      local sock="$current_socket"
+      [ -S "$socket_dir/$sock" ] || continue
+
+      local count master rank sessions
+      count="$(count_backend_sessions "$base" "$sock")"
+      sessions="$(list_backend_sessions "$base" "$sock")"
+      master=0
+      if has_backend_master "$base" "$sock"; then
+        master=1
+      fi
+      rank="$(socket_rank "$sock")"
+
+      if [ "$count" -gt "$best_count" ] ||
+        { [ "$count" -eq "$best_count" ] && [ "$master" -gt "$best_master" ]; } ||
+        { [ "$count" -eq "$best_count" ] && [ "$master" -eq "$best_master" ] && [ "$rank" -gt "$best_rank" ]; }; then
+        best_base="$base"
+        best_socket="$sock"
+        best_count="$count"
+        best_master="$master"
+        best_rank="$rank"
+        best_sessions="$sessions"
+      fi
+      continue
+    fi
+
+    for sock_path in "$socket_dir"/*; do
+      [ -S "$sock_path" ] || continue
+      local sock="${sock_path##*/}"
+
+      local count master rank sessions
+      count="$(count_backend_sessions "$base" "$sock")"
+      if [ "$count" -eq 0 ]; then
+        continue
+      fi
+      sessions="$(list_backend_sessions "$base" "$sock")"
+      master=0
+      if has_backend_master "$base" "$sock"; then
+        master=1
+      fi
+      rank="$(socket_rank "$sock")"
+
+      if [ "$count" -gt "$best_count" ] ||
+        { [ "$count" -eq "$best_count" ] && [ "$master" -gt "$best_master" ]; } ||
+        { [ "$count" -eq "$best_count" ] && [ "$master" -eq "$best_master" ] && [ "$rank" -gt "$best_rank" ]; }; then
+        best_base="$base"
+        best_socket="$sock"
+        best_count="$count"
+        best_master="$master"
+        best_rank="$rank"
+        best_sessions="$sessions"
+      fi
+    done
+  done
+
+  if [ -z "$best_socket" ] || [ "$best_count" -eq 0 ]; then
+    return 0
+  fi
+
+  local should_switch=0
+  if [ "$current_count" -eq 0 ]; then
+    should_switch=1
+  elif [ "$best_count" -gt "$current_count" ]; then
+    if is_subset_sessions "$current_sessions" "$best_sessions"; then
+      should_switch=1
+    fi
+  fi
+
+  if [ "$should_switch" -eq 1 ]; then
+    if [ "$socket_fixed" -eq 0 ]; then
+      TMUX_SOCKET="$best_socket"
+    fi
+    if [ "$tmp_fixed" -eq 0 ]; then
+      export TMUX_TMPDIR="$best_base"
+    fi
+    log_debug "auto-detected tmux backend: socket=${TMUX_SOCKET}; TMUX_TMPDIR=${TMUX_TMPDIR:-<unset>}"
+  else
+    if [ "${TMUX_AI_DEBUG:-0}" != "0" ] && [ "$best_count" -gt "$current_count" ]; then
+      log_debug "found another backend with more sessions: socket=$best_socket TMUX_TMPDIR=$best_base (count=$best_count). Set TMUX_AI_SOCKET/TMUX_TMPDIR to switch."
+    fi
+  fi
+}
+
+detect_tmux_backend
+
+if [ -n "${TMUX_TMPDIR:-}" ]; then
+  TMUX_CMD=(env TMUX_TMPDIR="$TMUX_TMPDIR" tmux -f "$tmux_conf" -L "$TMUX_SOCKET")
+else
+  TMUX_CMD=(tmux -f "$tmux_conf" -L "$TMUX_SOCKET")
+fi
 
 has_python3() {
   command -v python3 >/dev/null 2>&1
@@ -606,28 +838,37 @@ cmd_attach_json() {
   session_json="$(session_info_json "$session")"
 
   if has_python3; then
-    python3 - "$PROTOCOL_VERSION" "$tmux_conf" "$TMUX_SOCKET" "$session" "$session_json" <<'PY'
+    python3 - "$PROTOCOL_VERSION" "$tmux_conf" "$TMUX_SOCKET" "${TMUX_TMPDIR:-}" "$session" "$session_json" <<'PY'
 import json, sys
 
 protocol_version = int(sys.argv[1])
 tmux_conf = sys.argv[2]
 socket = sys.argv[3]
-session = sys.argv[4]
-session_obj = json.loads(sys.argv[5])
+tmux_tmpdir = sys.argv[4]
+session = sys.argv[5]
+session_obj = json.loads(sys.argv[6])
 
 argv = ["tmux", "-f", tmux_conf, "-L", socket, "attach", "-t", session]
+if tmux_tmpdir:
+  argv = ["env", f"TMUX_TMPDIR={tmux_tmpdir}"] + argv
 obj = {"ok": True, "protocolVersion": protocol_version, "argv": argv, "session": session_obj}
 print(json.dumps(obj, ensure_ascii=False))
 PY
     return 0
   fi
 
-  local conf_esc socket_esc session_esc
+  local conf_esc socket_esc session_esc tmpdir_esc
   conf_esc="$(json_escape_bash "$tmux_conf")"
   socket_esc="$(json_escape_bash "$TMUX_SOCKET")"
+  tmpdir_esc="$(json_escape_bash "${TMUX_TMPDIR:-}")"
   session_esc="$(json_escape_bash "$session")"
-  printf '{"ok":true,"protocolVersion":%d,"argv":["tmux","-f","%s","-L","%s","attach","-t","%s"],"session":%s}\n' \
-    "$PROTOCOL_VERSION" "$conf_esc" "$socket_esc" "$session_esc" "$session_json"
+  if [ -n "${TMUX_TMPDIR:-}" ]; then
+    printf '{"ok":true,"protocolVersion":%d,"argv":["env","TMUX_TMPDIR=%s","tmux","-f","%s","-L","%s","attach","-t","%s"],"session":%s}\n' \
+      "$PROTOCOL_VERSION" "$tmpdir_esc" "$conf_esc" "$socket_esc" "$session_esc" "$session_json"
+  else
+    printf '{"ok":true,"protocolVersion":%d,"argv":["tmux","-f","%s","-L","%s","attach","-t","%s"],"session":%s}\n' \
+      "$PROTOCOL_VERSION" "$conf_esc" "$socket_esc" "$session_esc" "$session_json"
+  fi
 }
 
 cmd_rename_json() {

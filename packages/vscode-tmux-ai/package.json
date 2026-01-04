@@ -2,7 +2,7 @@
   "name": "vscode-tmux-ai",
   "displayName": "Tmux AI",
   "description": "Production-grade VS Code integration for tmux-ai-cli (multi-session, multi-client, passive sync).",
-  "version": "0.0.5",
+  "version": "0.0.7",
   "publisher": "tmux-ai",
   "repository": {
     "type": "git",
@@ -248,10 +248,23 @@
           "default": null,
           "description": "Optional override for TMUX_AI_CONFIG when running tmux-ai-cli."
         },
+        "tmuxAi.cli.tmuxTmpDir": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "default": null,
+          "description": "Optional override for TMUX_TMPDIR when running tmux-ai-cli (useful when VS Code connects to a different tmux socket directory than your shell)."
+        },
         "tmuxAi.cli.autoInstallBundled": {
           "type": "boolean",
           "default": true,
           "description": "Automatically install the bundled tmux-ai-cli into VS Code global storage when the CLI is missing."
+        },
+        "tmuxAi.cli.autoDetectBackend": {
+          "type": "boolean",
+          "default": true,
+          "description": "Automatically detect and align the tmux backend when the Sessions view shows 0 sessions but orphaned terminals exist."
         },
         "tmuxAi.discovery.searchPaths": {
           "type": "array",

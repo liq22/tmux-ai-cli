@@ -49,8 +49,11 @@ export function registerDiagnosticsCommand(context: vscode.ExtensionContext): vo
         `- cliPath: ${cliPath ?? "<unset>"}`,
         `- tmuxAi.cli.socket: ${cfg.cliSocket ?? "<unset>"}`,
         `- tmuxAi.cli.configDir: ${cfg.cliConfigDir ?? "<unset>"}`,
+        `- tmuxAi.cli.tmuxTmpDir: ${cfg.cliTmuxTmpDir ?? "<unset>"}`,
+        `- tmuxAi.cli.autoDetectBackend: ${cfg.cliAutoDetectBackend}`,
         `- env.TMUX_AI_SOCKET: ${process.env.TMUX_AI_SOCKET ?? "<unset>"}`,
         `- env.TMUX_AI_CONFIG: ${process.env.TMUX_AI_CONFIG ?? "<unset>"}`,
+        `- env.TMUX_TMPDIR: ${process.env.TMUX_TMPDIR ?? "<unset>"}`,
         `- ${listSummary}`,
       ];
       const text = lines.join("\n");
@@ -63,4 +66,3 @@ export function registerDiagnosticsCommand(context: vscode.ExtensionContext): vo
     }),
   );
 }
-

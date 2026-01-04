@@ -1,49 +1,12 @@
-import * as fs from "node:fs/promises";
-import * as os from "node:os";
-import * as path from "node:path";
 import * as vscode from "vscode";
 
 import { getCliRunner } from "../cli/factory";
 import { CliListOk } from "../cli/protocol";
 import { CliExecError, CliProtocolError, CliResponseError } from "../cli/runner";
-import { getCliEnvOverrides, readConfig, updateCliSocket } from "../config";
+import { getCliEnvOverrides, readConfig, updateCliSocket, updateCliTmuxTmpDir } from "../config";
 import { ensureCliPath } from "../discovery";
+import { candidateTmuxTmpDirs, listSocketCandidates } from "../tmux/backendCandidates";
 import { SessionsTreeProvider } from "../tree/provider";
-
-function candidateTmuxSocketDirs(): string[] {
-  const uid = typeof process.getuid === "function" ? process.getuid() : null;
-  if (uid === null) return [];
-
-  const bases = new Set<string>();
-  if (process.env.TMUX_TMPDIR) bases.add(process.env.TMUX_TMPDIR);
-  bases.add("/tmp");
-  bases.add(os.tmpdir());
-
-  return Array.from(bases)
-    .filter((p) => p && p.trim().length > 0)
-    .map((base) => path.join(base, `tmux-${uid}`));
-}
-
-async function listSocketNames(): Promise<string[]> {
-  const names = new Set<string>();
-  for (const dir of candidateTmuxSocketDirs()) {
-    try {
-      const entries = await fs.readdir(dir);
-      for (const entry of entries) {
-        const full = path.join(dir, entry);
-        try {
-          const st = await fs.lstat(full);
-          if (st.isSocket()) names.add(entry);
-        } catch {
-          // ignore
-        }
-      }
-    } catch {
-      // ignore
-    }
-  }
-  return Array.from(names).sort((a, b) => a.localeCompare(b));
-}
 
 function formatListSummary(list: CliListOk): string {
   const shortNames = list.sessions
@@ -73,14 +36,16 @@ export function registerDetectSocketCommand(
       const cliPath = await ensureCliPath(true);
       if (!cliPath) return;
 
-      const sockets = await listSocketNames();
-      if (sockets.length === 0) {
-        vscode.window.showWarningMessage("No tmux socket directory found under /tmp (or TMUX_TMPDIR).");
+      const tmpDirs = candidateTmuxTmpDirs([cfg.cliTmuxTmpDir ?? ""].filter(Boolean));
+      const candidates = await listSocketCandidates(tmpDirs);
+      if (candidates.length === 0) {
+        vscode.window.showWarningMessage("No tmux socket found (checked /tmp, os.tmpdir, ~/.tmux-tmp, workspace .tmux-tmp, and TMUX_TMPDIR).");
         return;
       }
 
       const baseOverrides = getCliEnvOverrides(cfg);
-      const candidates: Array<{
+      const results: Array<{
+        tmuxTmpDir: string;
         socket: string;
         list: CliListOk | null;
         error: string | null;
@@ -89,46 +54,64 @@ export function registerDetectSocketCommand(
       await vscode.window.withProgress(
         { location: vscode.ProgressLocation.Notification, title: "Tmux AI: Detecting tmux sockets…" },
         async () => {
-          for (const socket of sockets) {
+          for (const candidate of candidates) {
             try {
               const runner = getCliRunner(cliPath, {
                 debug: cfg.debug,
-                envOverrides: { ...baseOverrides, TMUX_AI_SOCKET: socket },
+                envOverrides: {
+                  ...baseOverrides,
+                  TMUX_TMPDIR: candidate.tmuxTmpDir,
+                  TMUX_AI_SOCKET: candidate.socket,
+                },
               });
               const list = await runner.list();
-              candidates.push({ socket, list, error: null });
+              results.push({ tmuxTmpDir: candidate.tmuxTmpDir, socket: candidate.socket, list, error: null });
             } catch (err) {
-              candidates.push({ socket, list: null, error: formatError(err) });
+              results.push({
+                tmuxTmpDir: candidate.tmuxTmpDir,
+                socket: candidate.socket,
+                list: null,
+                error: formatError(err),
+              });
             }
           }
         },
       );
 
-      const items = candidates
+      const items = results
         .map((c) => {
-          const hasSessions = (c.list?.sessions.length ?? 0) > 0;
+          const sessionsCount = c.list?.sessions.length ?? 0;
+          const hasSessions = sessionsCount > 0;
           return {
             label: c.socket,
-            description: c.error ? "error" : `${c.list?.sessions.length ?? 0} session(s)`,
+            description: c.error ? `error · tmpDir=${c.tmuxTmpDir}` : `${sessionsCount} session(s) · tmpDir=${c.tmuxTmpDir}`,
             detail: c.error ? c.error : formatListSummary(c.list!),
             socket: c.socket,
+            tmuxTmpDir: c.tmuxTmpDir,
             hasSessions,
           };
         })
-        .sort((a, b) => Number(b.hasSessions) - Number(a.hasSessions) || a.label.localeCompare(b.label));
+        .sort(
+          (a, b) =>
+            Number(b.hasSessions) - Number(a.hasSessions) ||
+            a.label.localeCompare(b.label) ||
+            a.tmuxTmpDir.localeCompare(b.tmuxTmpDir),
+        );
 
       const picked = await vscode.window.showQuickPick(items, {
-        title: "Select TMUX_AI_SOCKET for tmux-ai-cli",
-        placeHolder: "Pick the socket that contains your ai-* sessions",
+        title: "Select tmux backend for tmux-ai-cli",
+        placeHolder: "Pick the (TMUX_TMPDIR, TMUX_AI_SOCKET) that contains your ai-* sessions",
         matchOnDescription: true,
         matchOnDetail: true,
       });
       if (!picked) return;
 
       await updateCliSocket(picked.socket);
+      await updateCliTmuxTmpDir(picked.tmuxTmpDir);
       await provider.reload({ interactive: false, silent: false });
-      vscode.window.showInformationMessage(`Set tmuxAi.cli.socket=${picked.socket}`);
+      vscode.window.showInformationMessage(
+        `Set tmuxAi.cli.socket=${picked.socket}, tmuxAi.cli.tmuxTmpDir=${picked.tmuxTmpDir}`,
+      );
     }),
   );
 }
-

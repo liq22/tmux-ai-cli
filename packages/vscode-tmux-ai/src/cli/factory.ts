@@ -10,7 +10,8 @@ export function getCliRunner(
 ): CliRunner {
   const sock = options.envOverrides?.TMUX_AI_SOCKET ?? "";
   const conf = options.envOverrides?.TMUX_AI_CONFIG ?? "";
-  const key = `${cliPath}::${options.debug ? "1" : "0"}::sock=${sock}::conf=${conf}`;
+  const tmp = options.envOverrides?.TMUX_TMPDIR ?? "";
+  const key = `${cliPath}::${options.debug ? "1" : "0"}::sock=${sock}::conf=${conf}::tmp=${tmp}`;
   if (cached?.key === key) return cached.runner;
   const env = options.envOverrides ? { ...process.env, ...options.envOverrides } : undefined;
   cached = { key, runner: new CliRunner({ cliPath, debug: options.debug, env }) };

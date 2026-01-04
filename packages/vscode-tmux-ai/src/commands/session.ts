@@ -20,11 +20,20 @@ async function ensureRunner(interactive: boolean): Promise<CliRunner | null> {
   return getCliRunner(cliPath, { debug: cfg.debug, envOverrides: getCliEnvOverrides(cfg) });
 }
 
+function toTerminalEnv(overrides: ReturnType<typeof getCliEnvOverrides>): Record<string, string | null> | undefined {
+  const env: Record<string, string | null> = {};
+  if (overrides.TMUX_AI_SOCKET) env.TMUX_AI_SOCKET = overrides.TMUX_AI_SOCKET;
+  if (overrides.TMUX_AI_CONFIG) env.TMUX_AI_CONFIG = overrides.TMUX_AI_CONFIG;
+  if (overrides.TMUX_TMPDIR) env.TMUX_TMPDIR = overrides.TMUX_TMPDIR;
+  return Object.keys(env).length > 0 ? env : undefined;
+}
+
 function createAttachTerminal(options: {
   shortName: string;
   iconId: string;
   argv: string[];
   terminalName: string;
+  env?: Record<string, string | null>;
 }): vscode.Terminal {
   if (options.argv.length === 0) {
     throw new Error("CLI returned empty argv for attach");
@@ -34,6 +43,7 @@ function createAttachTerminal(options: {
     name: options.terminalName,
     shellPath: options.argv[0],
     shellArgs: options.argv.slice(1),
+    ...(options.env && Object.keys(options.env).length > 0 ? { env: options.env } : {}),
     iconPath: new vscode.ThemeIcon(options.iconId, instanceColor),
     color: instanceColor,
   });
@@ -71,11 +81,13 @@ export function registerSessionCommands(
         const resp = await runner.attach(shortName);
         const cfg = readConfig();
         const terminalName = formatPrimaryTerminalName(cfg.terminalNameFormat, shortName);
+        const envOverrides = toTerminalEnv(getCliEnvOverrides(cfg));
         const terminal = createAttachTerminal({
           shortName,
           iconId: node.typeInfo.icon || "terminal",
           argv: resp.argv,
           terminalName,
+          env: envOverrides,
         });
         terminalManager.trackSessionTerminal(shortName, 1, terminal);
         terminal.show();
@@ -112,12 +124,14 @@ export function registerSessionCommands(
           shortName,
           k,
         );
+        const envOverrides = toTerminalEnv(getCliEnvOverrides(cfg));
 
         const terminal = createAttachTerminal({
           shortName,
           iconId: node.typeInfo.icon || "terminal",
           argv: resp.argv,
           terminalName,
+          env: envOverrides,
         });
         terminalManager.trackSessionTerminal(shortName, k, terminal);
         terminal.show();

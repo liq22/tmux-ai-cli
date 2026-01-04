@@ -92,6 +92,7 @@ export async function syncWorkspaceTerminalProfiles(options: {
     const env: Record<string, string> = {};
     if (cfg.cliSocket) env.TMUX_AI_SOCKET = cfg.cliSocket;
     if (cfg.cliConfigDir) env.TMUX_AI_CONFIG = cfg.cliConfigDir;
+    if (cfg.cliTmuxTmpDir) env.TMUX_TMPDIR = cfg.cliTmuxTmpDir;
     const profile: TerminalProfile = {
       path: options.cliPath,
       args: ["attach", session.shortName],

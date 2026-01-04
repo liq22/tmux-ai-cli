@@ -281,8 +281,8 @@ export class SessionsTreeProvider implements vscode.TreeDataProvider<TreeNode> {
         label: orphaned.length > 0 ? "0 sessions (possible backend mismatch)" : "No sessions found",
         description:
           orphaned.length > 0
-            ? "Found orphaned terminals. Check TMUX_AI_SOCKET/TMUX_AI_CONFIG and run Detect CLI Socket."
-            : "If you expected sessions, check TMUX_AI_SOCKET/TMUX_AI_CONFIG and run Detect CLI Socket.",
+            ? "Found orphaned terminals. Check TMUX_AI_SOCKET/TMUX_AI_CONFIG/TMUX_TMPDIR and run Detect CLI Socket."
+            : "If you expected sessions, check TMUX_AI_SOCKET/TMUX_AI_CONFIG/TMUX_TMPDIR and run Detect CLI Socket.",
         command: { command: "tmuxAi.cli.detectSocket", title: "Detect CLI Socket" },
       };
       hintNodes.push(node);
