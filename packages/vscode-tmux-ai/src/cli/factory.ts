@@ -14,7 +14,9 @@ export function getCliRunner(
   const tmp = options.envOverrides?.TMUX_TMPDIR ?? "";
   const key = `${cliPath}::${options.debug ? "1" : "0"}::fixed=${fixed}::sock=${sock}::conf=${conf}::tmp=${tmp}`;
   if (cached?.key === key) return cached.runner;
-  const env = options.envOverrides ? { ...process.env, ...options.envOverrides } : undefined;
+  const env = { ...process.env };
+  delete env.TMUX;
+  if (options.envOverrides) Object.assign(env, options.envOverrides);
   cached = { key, runner: new CliRunner({ cliPath, debug: options.debug, env }) };
   return cached.runner;
 }

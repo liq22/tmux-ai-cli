@@ -4,6 +4,12 @@
 
 set -euo pipefail
 
+# Avoid nested-tmux attach failures when VS Code (or the user) is running inside another tmux client.
+# tmux can exit(1) with "sessions should be nested with care, unset $TMUX to force".
+if [ -n "${TMUX-}" ]; then
+  unset TMUX
+fi
+
 script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 # 配置文件路径：优先使用 ~/.config/tmux-ai/，否则使用相对于脚本的路径
@@ -899,9 +905,10 @@ tmux_tmpdir = sys.argv[4]
 session = sys.argv[5]
 session_obj = json.loads(sys.argv[6])
 
-argv = ["tmux", "-f", tmux_conf, "-L", socket, "attach", "-t", session]
+argv = ["env", "-u", "TMUX"]
 if tmux_tmpdir:
-  argv = ["env", f"TMUX_TMPDIR={tmux_tmpdir}"] + argv
+  argv.append(f"TMUX_TMPDIR={tmux_tmpdir}")
+argv += ["tmux", "-f", tmux_conf, "-L", socket, "attach", "-t", session]
 obj = {"ok": True, "protocolVersion": protocol_version, "argv": argv, "session": session_obj}
 print(json.dumps(obj, ensure_ascii=False))
 PY
@@ -914,10 +921,10 @@ PY
   tmpdir_esc="$(json_escape_bash "${TMUX_TMPDIR:-}")"
   session_esc="$(json_escape_bash "$session")"
   if [ -n "${TMUX_TMPDIR:-}" ]; then
-    printf '{"ok":true,"protocolVersion":%d,"argv":["env","TMUX_TMPDIR=%s","tmux","-f","%s","-L","%s","attach","-t","%s"],"session":%s}\n' \
+    printf '{"ok":true,"protocolVersion":%d,"argv":["env","-u","TMUX","TMUX_TMPDIR=%s","tmux","-f","%s","-L","%s","attach","-t","%s"],"session":%s}\n' \
       "$PROTOCOL_VERSION" "$tmpdir_esc" "$conf_esc" "$socket_esc" "$session_esc" "$session_json"
   else
-    printf '{"ok":true,"protocolVersion":%d,"argv":["tmux","-f","%s","-L","%s","attach","-t","%s"],"session":%s}\n' \
+    printf '{"ok":true,"protocolVersion":%d,"argv":["env","-u","TMUX","tmux","-f","%s","-L","%s","attach","-t","%s"],"session":%s}\n' \
       "$PROTOCOL_VERSION" "$conf_esc" "$socket_esc" "$session_esc" "$session_json"
   fi
 }

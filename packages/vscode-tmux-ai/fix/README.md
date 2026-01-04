@@ -26,6 +26,20 @@ tmux server 的“后端”由 socket 决定，而 socket 目录通常依赖：
 - VS Code 里创建的 session 在外部 `ai list` 看不到（反之亦然）
 - VS Code 视图显示 `0 sessions`，但 Orphaned 里还有之前开的终端（因为它们来自另一个 backend）
 
+## 关键判断 2：嵌套 tmux（`env.TMUX`）导致 attach 直接失败
+
+如果 VS Code（或 VS Code Server）本身是在一个 tmux 里启动的，那么 Extension Host 进程通常会带着 `TMUX` 环境变量。
+
+此时扩展创建的终端进程会尝试运行类似命令：
+- `tmux -L ai attach -t ai-XX`
+
+tmux 会判定这是“嵌套 tmux”，常见报错为：
+- `sessions should be nested with care, unset $TMUX to force`
+
+并且直接以 **exit code 1** 退出，最终表现为：
+- VS Code Tree 里 session 可能一直显示 `0 session(s)`（list/attach 都失败或被吞错）
+- 新开的终端立刻变成 `Dead`，并出现在 **Orphaned**
+
 ## 本次修复的方向（代码层面）
 
 ### 1) 扩展：对齐 `TMUX_TMPDIR`
@@ -39,6 +53,10 @@ tmux server 的“后端”由 socket 决定，而 socket 目录通常依赖：
 
 同时在 “0 sessions + orphaned terminals” 时自动探测一次（`tmuxAi.cli.autoDetectBackend=true`）。
 
+### 1.1) 扩展：启动 tmux attach 时移除 `TMUX`
+
+扩展在创建 attach 终端时会显式移除 `TMUX`（`TerminalOptions.env: { TMUX: null }`），避免嵌套 tmux 直接退出。
+
 ### 2) CLI：自动探测并输出可附着的 argv
 
 `ai` 现在会自动探测可见 session 的 tmux backend（同时考虑 `TMUX_TMPDIR` 和 socket）并选择“包含当前 backend session 的超集”：
@@ -47,7 +65,7 @@ tmux server 的“后端”由 socket 决定，而 socket 目录通常依赖：
 另外：如果环境里 `TMUX_TMPDIR` 被 VS Code / SSH / systemd 注入，旧逻辑会把它当作固定值，导致探测不到其他目录（如 `/tmp`）下的 socket；现改为仅当 `TMUX_AI_BACKEND_FIXED=1` 时才把 `TMUX_TMPDIR` 视为固定覆盖。
 
 同时 `ai attach --json` 返回的 `argv` 会在需要时包含：
-- `env TMUX_TMPDIR=<...> tmux ...`
+- `env -u TMUX TMUX_TMPDIR=<...> tmux ...`
 
 确保 VS Code 使用该 `argv` 启动的终端，附着到同一个 tmux server。
 
@@ -66,6 +84,7 @@ tmux server 的“后端”由 socket 决定，而 socket 目录通常依赖：
 - 运行 `Tmux AI: Detect CLI Socket` 选择 sessions>0 的候选
 - 运行 `Tmux AI: Diagnostics` 复制信息核对：
   - `tmuxAi.cli.socket / tmuxAi.cli.tmuxTmpDir / env.TMUX_TMPDIR`
+  - 如果 `env.TMUX` 非空且你看到 attach exit code 1，基本可以确认是嵌套 tmux 问题（升级扩展/CLI 后应自动规避）。
 
 3) 若历史上已经产生“多套 backend”，可能存在重复 session：
 - 需要分别连接到各 backend 清理（kill/rename），最终保证全员统一到一个 `(TMUX_TMPDIR, socket)`。

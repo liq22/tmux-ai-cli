@@ -69,7 +69,7 @@ vsce package --no-dependencies
 Then install the generated `.vsix`:
 
 - VS Code UI: **Extensions** → **⋯** → **Install from VSIX…**
-- VS Code CLI: `code --install-extension vscode-tmux-ai-0.0.10.vsix`
+- VS Code CLI: `code --install-extension vscode-tmux-ai-0.0.11.vsix`
 
 ## Debug
 
@@ -89,6 +89,7 @@ Recommended workflow (with breakpoints):
 - **Extension shows 0 sessions but `ai list` shows sessions**: run `Tmux AI: Detect CLI Socket` and select the backend that contains your sessions (sets `tmuxAi.cli.socket` + `tmuxAi.cli.tmuxTmpDir`), then refresh.
 - If it still shows 0, run `Tmux AI: Diagnostics` and ensure `tmuxAi.cliPath` points to the same `ai` you use in the shell, and that `tmuxAi.cli.socket` / `tmuxAi.cli.configDir` match your environment.
 - **Sessions created in the extension are not visible in your shell (or vice versa)**: this is almost always a backend mismatch (different `TMUX_AI_SOCKET`, `TMUX_AI_CONFIG`, or `TMUX_TMPDIR`).
+- **Connect/Attach terminal exits immediately with code 1**: if VS Code is started inside another tmux, `env.TMUX` may be set and tmux refuses to attach to a different server (“sessions should be nested with care…”). Upgrade to the latest extension/CLI (they unset `TMUX` for attach terminals), or launch VS Code outside tmux as a workaround.
 - Quick fix: run `Tmux AI: Use CLI Install Defaults` (assumes `install.sh` defaults: `~/.local/bin/ai` + `~/.config/tmux-ai` + socket `ai`).
 - To edit CLI config: run `Tmux AI: Open CLI Config` (opens `ai-types.yaml` / `.tmux.conf`).
 - To remove the bundled CLI: run `Tmux AI: Uninstall tmux-ai-cli (Bundled)` (VS Code may not run cleanup automatically on uninstall, so run this command first if you want the files removed).
