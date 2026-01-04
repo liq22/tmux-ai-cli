@@ -1,0 +1,33 @@
+# AI 类型定义
+# 用于 ai-tmux 脚本自动创建和管理 AI 实例
+
+types:
+  claude:
+    cmd: claude
+    icon: sparkle
+    base_color: terminal.ansiMagenta
+    description: "Claude Code"
+
+  gemini:
+    cmd: gemini
+    icon: globe
+    base_color: terminal.ansiCyan
+    description: "Gemini"
+
+  codex:
+    cmd: codex
+    icon: hubot
+    base_color: terminal.ansiGreen
+    description: "Codex"
+
+# 颜色变体（用于同类型多实例）
+color_variants:
+  - terminal.ansiMagenta
+  - terminal.ansiPurple
+  - terminal.ansiPink
+  - terminal.ansiCyan
+  - terminal.ansiBlue
+  - terminal.ansiGreen
+  - terminal.ansiYellow
+  - terminal.ansiOrange
+  - terminal.ansiRed

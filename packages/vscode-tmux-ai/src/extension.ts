@@ -9,6 +9,7 @@ import { registerCreateSessionCommand } from "./commands/createSession";
 import { registerDiagnosticsCommand } from "./commands/diagnostics";
 import { registerCliConfigCommands } from "./commands/cliConfig";
 import { registerDetectSocketCommand } from "./commands/detectSocket";
+import { registerCliInstallerCommands } from "./commands/cliInstaller";
 import { SessionsTreeProvider } from "./tree/provider";
 import { TerminalManager } from "./terminal/manager";
 import { ensureWorkspaceTerminalFallbackSettings } from "./workspace/fallbackSettings";
@@ -77,6 +78,29 @@ export function activate(context: vscode.ExtensionContext): void {
   registerDiagnosticsCommand(context);
   registerCliConfigCommands(context, provider);
   registerDetectSocketCommand(context, provider);
+  registerCliInstallerCommands(context, provider);
+
+  void (async () => {
+    const promptedKey = "tmuxAi.cli.installPrompted";
+    const prompted = context.globalState.get<boolean>(promptedKey) ?? false;
+    if (prompted) return;
+
+    const cliPath = await ensureCliPath(false);
+    if (cliPath) {
+      await context.globalState.update(promptedKey, true);
+      return;
+    }
+
+    const action = await vscode.window.showInformationMessage(
+      "tmux-ai-cli (ai) not found. Install the bundled CLI for this extension?",
+      "Install",
+      "Later",
+    );
+    await context.globalState.update(promptedKey, true);
+    if (action === "Install") {
+      await vscode.commands.executeCommand("tmuxAi.cli.installBundled");
+    }
+  })();
 
   let passiveSyncTimer: NodeJS.Timeout | null = null;
   context.subscriptions.push(

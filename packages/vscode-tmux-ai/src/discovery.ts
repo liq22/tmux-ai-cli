@@ -26,7 +26,31 @@ async function isExecutableFile(filePath: string): Promise<boolean> {
 
 export async function ensureCliPath(interactive: boolean): Promise<string | null> {
   const cfg = readConfig();
-  if (cfg.cliPath) return cfg.cliPath;
+  if (cfg.cliPath) {
+    if (await isExecutableFile(cfg.cliPath)) return cfg.cliPath;
+
+    if (interactive) {
+      const action = await vscode.window.showErrorMessage(
+        `tmuxAi.cliPath 不可执行或不存在: ${cfg.cliPath}`,
+        "Install Bundled",
+        "Select File",
+        "Open Settings",
+      );
+      if (action === "Install Bundled") {
+        await vscode.commands.executeCommand("tmuxAi.cli.installBundled");
+        const next = readConfig().cliPath;
+        return next && (await isExecutableFile(next)) ? next : null;
+      }
+      if (action === "Select File") {
+        return await pickCliPath();
+      }
+      if (action === "Open Settings") {
+        await vscode.commands.executeCommand("workbench.action.openSettings", "tmuxAi.cliPath");
+      }
+    }
+
+    return null;
+  }
 
   const candidates = cfg.discoverySearchPaths.map(expandPathTemplate);
   for (const candidate of candidates) {
@@ -48,9 +72,15 @@ export async function ensureCliPath(interactive: boolean): Promise<string | null
   if (interactive) {
     const action = await vscode.window.showErrorMessage(
       "未找到 tmux-ai-cli (ai)。请在设置中配置 tmuxAi.cliPath。",
+      "Install Bundled",
       "Open Settings",
       "Select File",
     );
+    if (action === "Install Bundled") {
+      await vscode.commands.executeCommand("tmuxAi.cli.installBundled");
+      const next = readConfig().cliPath;
+      return next && (await isExecutableFile(next)) ? next : null;
+    }
     if (action === "Open Settings") {
       await vscode.commands.executeCommand("workbench.action.openSettings", "tmuxAi.cliPath");
     }
@@ -76,4 +106,3 @@ export async function pickCliPath(): Promise<string | null> {
   await updateCliPath(fsPath);
   return fsPath;
 }
-

@@ -119,7 +119,9 @@ export class CliRunner {
           }
 
           const exitCode =
-            error && typeof (error as any).code === "number" ? ((error as any).code as number) : 0;
+            error && typeof error === "object" && "code" in error && typeof error.code === "number"
+              ? error.code
+              : 0;
 
           if (error) {
             this.tryParseJsonOk<TOk>(stdoutText)

@@ -18,6 +18,7 @@ export class SessionsTreeProvider implements vscode.TreeDataProvider<TreeNode> {
   private lastError: Error | null = null;
   private degraded = false;
   private degradedHint: string | null = null;
+  private reloadInProgress: boolean = false;
 
   constructor(
     private readonly terminalManager: TerminalManager,
@@ -186,16 +187,23 @@ export class SessionsTreeProvider implements vscode.TreeDataProvider<TreeNode> {
     if (!cliPath) {
       void vscode.commands.executeCommand("setContext", "tmuxAi.hasOrphaned", false);
       this.setDegraded(false, null);
-      const node: MessageNode = {
+      const installNode: MessageNode = {
+        kind: "message",
+        label: "Install bundled tmux-ai-cli",
+        description: "No manual install.sh needed (installs into VS Code global storage)",
+        command: { command: "tmuxAi.cli.installBundled", title: "Install Bundled CLI" },
+      };
+      const pickNode: MessageNode = {
         kind: "message",
         label: "Configure tmuxAi.cliPath",
         description: "Select the tmux-ai-cli executable (ai)",
         command: { command: "tmuxAi.selectCliPath", title: "Select CLI Path" },
       };
-      return [node];
+      return [installNode, pickNode];
     }
 
-    if (!this.listCache && !this.lastError) {
+    if (!this.listCache && !this.lastError && !this.reloadInProgress) {
+      this.reloadInProgress = true;
       try {
         const runner = getCliRunner(cliPath, { debug: cfg.debug, envOverrides: getCliEnvOverrides(cfg) });
         this.listCache = await runner.list();
@@ -210,6 +218,8 @@ export class SessionsTreeProvider implements vscode.TreeDataProvider<TreeNode> {
         this.lastError = err instanceof Error ? err : new Error(String(err));
         const degraded = this.computeDegradedState(this.lastError);
         this.setDegraded(degraded.degraded, degraded.hint);
+      } finally {
+        this.reloadInProgress = false;
       }
     }
 
@@ -283,5 +293,9 @@ export class SessionsTreeProvider implements vscode.TreeDataProvider<TreeNode> {
       return [...hintNodes, ...typeNodes, orphanNode];
     }
     return hintNodes.length > 0 ? [...hintNodes, ...typeNodes] : typeNodes;
+  }
+
+  dispose(): void {
+    this.onDidChangeTreeDataEmitter.dispose();
   }
 }

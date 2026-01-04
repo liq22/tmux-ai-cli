@@ -2,7 +2,7 @@
   "name": "vscode-tmux-ai",
   "displayName": "Tmux AI",
   "description": "Production-grade VS Code integration for tmux-ai-cli (multi-session, multi-client, passive sync).",
-  "version": "0.0.2",
+  "version": "0.0.3",
   "publisher": "tmux-ai",
   "repository": {
     "type": "git",
@@ -31,7 +31,9 @@
     "onCommand:tmuxAi.diagnostics",
     "onCommand:tmuxAi.cli.useInstallDefaults",
     "onCommand:tmuxAi.cli.openConfig",
-    "onCommand:tmuxAi.cli.detectSocket"
+    "onCommand:tmuxAi.cli.detectSocket",
+    "onCommand:tmuxAi.cli.installBundled",
+    "onCommand:tmuxAi.cli.uninstallBundled"
   ],
   "contributes": {
     "viewsContainers": {
@@ -75,6 +77,14 @@
       {
         "command": "tmuxAi.cli.detectSocket",
         "title": "Tmux AI: Detect CLI Socket"
+      },
+      {
+        "command": "tmuxAi.cli.installBundled",
+        "title": "Tmux AI: Install tmux-ai-cli (Bundled)"
+      },
+      {
+        "command": "tmuxAi.cli.uninstallBundled",
+        "title": "Tmux AI: Uninstall tmux-ai-cli (Bundled)"
       },
       {
         "command": "tmuxAi.diagnostics",

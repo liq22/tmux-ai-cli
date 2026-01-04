@@ -1,0 +1,22 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+# ai-tmux (compat wrapper)
+#
+# This project now prefers `ai` as the single entrypoint. `ai-tmux` remains
+# for backward compatibility and forwards all commands to `ai`.
+
+script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+ai_bin="$script_dir/ai"
+
+if [ -x "$ai_bin" ]; then
+  if [ "$#" -eq 0 ]; then
+    exec "$ai_bin" help
+  fi
+  exec "$ai_bin" "$@"
+fi
+
+if [ "$#" -eq 0 ]; then
+  exec ai help
+fi
+exec ai "$@"
