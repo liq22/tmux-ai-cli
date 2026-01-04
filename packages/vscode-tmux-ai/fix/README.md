@@ -2,6 +2,8 @@
 
 > 截图：`packages/vscode-tmux-ai/fix/image.png`
 
+修复执行计划：`packages/vscode-tmux-ai/fix/plan.md`
+
 ## 现状 / 复现
 
 在 VS Code 的 **Tmux AI: Sessions** 视图中：
