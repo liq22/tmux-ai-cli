@@ -1,0 +1,70 @@
+# Fix Notes: VS Code 扩展 “0 sessions + Orphaned” 现象分析
+
+> 截图：`packages/vscode-tmux-ai/fix/image.png`
+
+## 现状 / 复现
+
+在 VS Code 的 **Tmux AI: Sessions** 视图中：
+- Claude/Codex/Gemini 都显示 `0 session(s)`
+- 同时出现 **Orphaned**（例如 `AI: test1/test2/hi Dead`）
+
+在命令行侧出现明显分叉（示例）：
+- `ai list` 只能看到少量实例（如 `ai-claude-1/2`, `ai-codex-1/2`）
+- `ai-tmux list` 却能看到更多实例（如 `ai-test1/ai-test2/ai-hi/...`）
+
+这两个现象说明：**VS Code 扩展 / 你的 shell / ai 命令 并没有连到同一个 tmux 后端**，所以彼此“看不到对方创建的 session”，并且 VS Code 里原有终端被标记为 Orphaned。
+
+## 关键判断：tmux 后端不一致
+
+tmux server 的“后端”由 socket 决定，而 socket 目录通常依赖：
+- `TMUX_TMPDIR`（如果设置了）
+- 否则默认 `/tmp/tmux-<uid>/...`（或 `os.tmpdir()`）
+
+因此只要 VS Code Extension Host 和你的外部 shell 环境变量不同（尤其是 `TMUX_TMPDIR`），即使 `TMUX_AI_SOCKET=ai` 相同，也可能连接到 **不同的 tmux server**。
+
+典型表现：
+- VS Code 里创建的 session 在外部 `ai list` 看不到（反之亦然）
+- VS Code 视图显示 `0 sessions`，但 Orphaned 里还有之前开的终端（因为它们来自另一个 backend）
+
+## 本次修复的方向（代码层面）
+
+### 1) 扩展：对齐 `TMUX_TMPDIR`
+
+扩展新增并使用配置项：
+- `tmuxAi.cli.tmuxTmpDir` → 注入到 CLI/终端的 `TMUX_TMPDIR`
+
+并升级 `Tmux AI: Detect CLI Socket`：
+- 不再只选 `TMUX_AI_SOCKET`
+- 改为探测并选择 `(TMUX_TMPDIR, TMUX_AI_SOCKET)` 组合，确保连接到正确 tmux server
+
+同时在 “0 sessions + orphaned terminals” 时自动探测一次（`tmuxAi.cli.autoDetectBackend=true`）。
+
+### 2) CLI：自动探测并输出可附着的 argv
+
+`ai` 现在会自动探测可见 session 的 tmux backend（同时考虑 `TMUX_TMPDIR` 和 socket）并选择“包含当前 backend session 的超集”：
+- 目标：让 `ai list` 与 `ai-tmux list` 不再分叉
+
+同时 `ai attach --json` 返回的 `argv` 会在需要时包含：
+- `env TMUX_TMPDIR=<...> tmux ...`
+
+确保 VS Code 使用该 `argv` 启动的终端，附着到同一个 tmux server。
+
+### 3) 扩展：bundled CLI 自动更新
+
+扩展使用 bundled CLI（安装在 VS Code global storage）时：
+- 若扩展升级导致 bundled CLI 过旧，会自动比对并静默更新（避免“扩展新逻辑，但 bundled 还是旧脚本”）
+
+## 排查建议（给用户/测试）
+
+1) 先对齐外部 CLI 到最新版（仓库根目录）：
+- `./install.sh`（更新 `~/.local/bin/ai`，`ai-tmux` 为兼容 wrapper）
+
+2) VS Code 安装最新 VSIX 后：
+- 运行 `Tmux AI: Install tmux-ai-cli (Bundled)` 更新 bundled CLI
+- 运行 `Tmux AI: Detect CLI Socket` 选择 sessions>0 的候选
+- 运行 `Tmux AI: Diagnostics` 复制信息核对：
+  - `tmuxAi.cli.socket / tmuxAi.cli.tmuxTmpDir / env.TMUX_TMPDIR`
+
+3) 若历史上已经产生“多套 backend”，可能存在重复 session：
+- 需要分别连接到各 backend 清理（kill/rename），最终保证全员统一到一个 `(TMUX_TMPDIR, socket)`。
+

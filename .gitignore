@@ -22,5 +22,6 @@ Thumbs.db
 packages/vscode-tmux-ai/node_modules/
 packages/vscode-tmux-ai/dist/
 packages/vscode-tmux-ai/package-lock.json
-packages/vscode-tmux-ai/fix/
+packages/vscode-tmux-ai/fix/**
+!packages/vscode-tmux-ai/fix/README.md
 *.vsix
