@@ -78,6 +78,7 @@ export function activate(context: vscode.ExtensionContext): void {
             debug: cfg.debug,
             envOverrides: {
               ...baseOverrides,
+              TMUX_AI_BACKEND_FIXED: "1",
               TMUX_TMPDIR: c.tmuxTmpDir,
               TMUX_AI_SOCKET: c.socket,
             },

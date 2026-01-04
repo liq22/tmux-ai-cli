@@ -44,6 +44,8 @@ tmux server 的“后端”由 socket 决定，而 socket 目录通常依赖：
 `ai` 现在会自动探测可见 session 的 tmux backend（同时考虑 `TMUX_TMPDIR` 和 socket）并选择“包含当前 backend session 的超集”：
 - 目标：让 `ai list` 与 `ai-tmux list` 不再分叉
 
+另外：如果环境里 `TMUX_TMPDIR` 被 VS Code / SSH / systemd 注入，旧逻辑会把它当作固定值，导致探测不到其他目录（如 `/tmp`）下的 socket；现改为仅当 `TMUX_AI_BACKEND_FIXED=1` 时才把 `TMUX_TMPDIR` 视为固定覆盖。
+
 同时 `ai attach --json` 返回的 `argv` 会在需要时包含：
 - `env TMUX_TMPDIR=<...> tmux ...`
 
@@ -67,4 +69,3 @@ tmux server 的“后端”由 socket 决定，而 socket 目录通常依赖：
 
 3) 若历史上已经产生“多套 backend”，可能存在重复 session：
 - 需要分别连接到各 backend 清理（kill/rename），最终保证全员统一到一个 `(TMUX_TMPDIR, socket)`。
-

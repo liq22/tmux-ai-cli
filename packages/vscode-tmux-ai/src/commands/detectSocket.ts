@@ -60,6 +60,7 @@ export function registerDetectSocketCommand(
                 debug: cfg.debug,
                 envOverrides: {
                   ...baseOverrides,
+                  TMUX_AI_BACKEND_FIXED: "1",
                   TMUX_TMPDIR: candidate.tmuxTmpDir,
                   TMUX_AI_SOCKET: candidate.socket,
                 },

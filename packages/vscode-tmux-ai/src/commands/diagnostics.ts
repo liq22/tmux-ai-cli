@@ -51,6 +51,8 @@ export function registerDiagnosticsCommand(context: vscode.ExtensionContext): vo
         `- tmuxAi.cli.configDir: ${cfg.cliConfigDir ?? "<unset>"}`,
         `- tmuxAi.cli.tmuxTmpDir: ${cfg.cliTmuxTmpDir ?? "<unset>"}`,
         `- tmuxAi.cli.autoDetectBackend: ${cfg.cliAutoDetectBackend}`,
+        `- env.TMUX: ${process.env.TMUX ?? "<unset>"}`,
+        `- env.TMUX_AI_BACKEND_FIXED: ${process.env.TMUX_AI_BACKEND_FIXED ?? "<unset>"}`,
         `- env.TMUX_AI_SOCKET: ${process.env.TMUX_AI_SOCKET ?? "<unset>"}`,
         `- env.TMUX_AI_CONFIG: ${process.env.TMUX_AI_CONFIG ?? "<unset>"}`,
         `- env.TMUX_TMPDIR: ${process.env.TMUX_TMPDIR ?? "<unset>"}`,

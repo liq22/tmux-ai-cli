@@ -121,7 +121,9 @@ detect_tmux_backend() {
   local socket_fixed=0
   local tmp_fixed=0
   [ -n "${TMUX_AI_SOCKET:-}" ] && socket_fixed=1
-  [ -n "${TMUX_TMPDIR:-}" ] && tmp_fixed=1
+  if [ -n "${TMUX_AI_BACKEND_FIXED:-}" ] && [ "${TMUX_AI_BACKEND_FIXED:-}" != "0" ]; then
+    [ -n "${TMUX_TMPDIR:-}" ] && tmp_fixed=1
+  fi
 
   local uid=""
   uid="$(id -u 2>/dev/null || true)"
@@ -154,10 +156,12 @@ detect_tmux_backend() {
   if [ "$tmp_fixed" -eq 1 ]; then
     add_base "${TMUX_TMPDIR}"
   else
+    add_base "${TMUX_TMPDIR:-}"
     add_base "${TMPDIR:-}"
     add_base "${TMP:-}"
     add_base "${TEMP:-}"
     add_base "${XDG_RUNTIME_DIR:-}"
+    add_base "/run/user/$uid"
     add_base "$HOME/.tmux-tmp"
     add_base "$PWD/.tmux-tmp"
     add_base "/tmp"
@@ -279,8 +283,6 @@ detect_tmux_backend() {
       return 0
     fi
     if [ "$best_superset_count" -gt "$current_count" ]; then
-      should_switch=1
-    elif [ "$best_superset_base" != "$current_base" ] || [ "$best_superset_socket" != "$current_socket" ]; then
       should_switch=1
     fi
     chosen_socket="$best_superset_socket"

@@ -49,6 +49,7 @@ export function readConfig(): TmuxAiConfig {
 }
 
 export interface CliEnvOverrides {
+  TMUX_AI_BACKEND_FIXED?: string;
   TMUX_AI_SOCKET?: string;
   TMUX_AI_CONFIG?: string;
   TMUX_TMPDIR?: string;
@@ -58,7 +59,10 @@ export function getCliEnvOverrides(cfg: TmuxAiConfig): CliEnvOverrides {
   const overrides: CliEnvOverrides = {};
   if (cfg.cliSocket) overrides.TMUX_AI_SOCKET = cfg.cliSocket;
   if (cfg.cliConfigDir) overrides.TMUX_AI_CONFIG = cfg.cliConfigDir;
-  if (cfg.cliTmuxTmpDir) overrides.TMUX_TMPDIR = cfg.cliTmuxTmpDir;
+  if (cfg.cliTmuxTmpDir) {
+    overrides.TMUX_AI_BACKEND_FIXED = "1";
+    overrides.TMUX_TMPDIR = cfg.cliTmuxTmpDir;
+  }
   return overrides;
 }
 

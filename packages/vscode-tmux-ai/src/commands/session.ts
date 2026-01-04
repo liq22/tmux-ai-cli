@@ -22,6 +22,7 @@ async function ensureRunner(interactive: boolean): Promise<CliRunner | null> {
 
 function toTerminalEnv(overrides: ReturnType<typeof getCliEnvOverrides>): Record<string, string | null> | undefined {
   const env: Record<string, string | null> = {};
+  if (overrides.TMUX_AI_BACKEND_FIXED) env.TMUX_AI_BACKEND_FIXED = overrides.TMUX_AI_BACKEND_FIXED;
   if (overrides.TMUX_AI_SOCKET) env.TMUX_AI_SOCKET = overrides.TMUX_AI_SOCKET;
   if (overrides.TMUX_AI_CONFIG) env.TMUX_AI_CONFIG = overrides.TMUX_AI_CONFIG;
   if (overrides.TMUX_TMPDIR) env.TMUX_TMPDIR = overrides.TMUX_TMPDIR;
