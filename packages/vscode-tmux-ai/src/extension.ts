@@ -32,7 +32,7 @@ function buffersEqual(a: Uint8Array, b: Uint8Array): boolean {
 export function activate(context: vscode.ExtensionContext): void {
   const terminalManager = new TerminalManager();
   let autoDetectInProgress = false;
-  let autoDetectAttempted = false;
+  let lastAutoDetectAt = 0;
 
   const provider = new SessionsTreeProvider(terminalManager, async ({ list, cliPath }) => {
     await ensureWorkspaceTerminalFallbackSettings();
@@ -41,13 +41,14 @@ export function activate(context: vscode.ExtensionContext): void {
     const cfg = readConfig();
     if (!cfg.cliAutoDetectBackend) return;
     if (autoDetectInProgress) return;
-    if (autoDetectAttempted) return;
     if (list.sessions.length > 0) return;
 
     const orphaned = terminalManager.getOrphaned();
     if (orphaned.length === 0) return;
 
-    if (cfg.cliSocket && cfg.cliTmuxTmpDir) return;
+    const now = Date.now();
+    if (now - lastAutoDetectAt < 15_000) return;
+    lastAutoDetectAt = now;
 
     const wanted = new Set(orphaned.map((o) => o.shortName).filter(Boolean));
     if (wanted.size === 0) return;
@@ -58,7 +59,6 @@ export function activate(context: vscode.ExtensionContext): void {
     if (candidates.length === 0) return;
 
     autoDetectInProgress = true;
-    autoDetectAttempted = true;
     try {
       type Probe = {
         socket: string;
@@ -67,8 +67,10 @@ export function activate(context: vscode.ExtensionContext): void {
         sessionsCount: number;
       };
 
-      let best: Probe | null = null;
-      let bestTies: Probe[] = [];
+      let bestByMatch: Probe | null = null;
+      let bestByMatchTies: Probe[] = [];
+      let bestBySessions: Probe | null = null;
+      let bestBySessionsTies: Probe[] = [];
 
       for (const c of candidates) {
         try {
@@ -94,32 +96,49 @@ export function activate(context: vscode.ExtensionContext): void {
             sessionsCount,
           };
 
-          if (!best) {
-            best = probe;
-            bestTies = [probe];
-            continue;
+          if (!bestByMatch) {
+            bestByMatch = probe;
+            bestByMatchTies = [probe];
+          } else if (probe.matchCount > bestByMatch.matchCount) {
+            bestByMatch = probe;
+            bestByMatchTies = [probe];
+          } else if (
+            probe.matchCount === bestByMatch.matchCount &&
+            probe.sessionsCount > bestByMatch.sessionsCount
+          ) {
+            bestByMatch = probe;
+            bestByMatchTies = [probe];
+          } else if (
+            probe.matchCount === bestByMatch.matchCount &&
+            probe.sessionsCount === bestByMatch.sessionsCount
+          ) {
+            bestByMatchTies.push(probe);
           }
 
-          if (probe.matchCount > best.matchCount) {
-            best = probe;
-            bestTies = [probe];
-            continue;
-          }
-          if (probe.matchCount === best.matchCount && probe.sessionsCount > best.sessionsCount) {
-            best = probe;
-            bestTies = [probe];
-            continue;
-          }
-          if (probe.matchCount === best.matchCount && probe.sessionsCount === best.sessionsCount) {
-            bestTies.push(probe);
+          if (probe.sessionsCount > 0) {
+            if (!bestBySessions) {
+              bestBySessions = probe;
+              bestBySessionsTies = [probe];
+            } else if (probe.sessionsCount > bestBySessions.sessionsCount) {
+              bestBySessions = probe;
+              bestBySessionsTies = [probe];
+            } else if (probe.sessionsCount === bestBySessions.sessionsCount) {
+              bestBySessionsTies.push(probe);
+            }
           }
         } catch {
           // ignore probe errors
         }
       }
 
-      if (!best || best.matchCount === 0) return;
-      if (bestTies.length !== 1) return;
+      const best =
+        bestByMatch && bestByMatch.matchCount > 0 && bestByMatchTies.length === 1
+          ? bestByMatch
+          : bestBySessions && bestBySessions.sessionsCount > 0 && bestBySessionsTies.length === 1
+            ? bestBySessions
+            : null;
+
+      if (!best) return;
 
       const needsUpdate = cfg.cliSocket !== best.socket || cfg.cliTmuxTmpDir !== best.tmuxTmpDir;
       if (!needsUpdate) return;
