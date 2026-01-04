@@ -45,6 +45,40 @@ tmux 会判定这是“嵌套 tmux”，常见报错为：
 - VS Code Tree 里 session 可能一直显示 `0 session(s)`（list/attach 都失败或被吞错）
 - 新开的终端立刻变成 `Dead`，并出现在 **Orphaned**
 
+## 新增现象：Connect 时终端进程直接退出（exit code: 1）
+
+你反馈的错误（示例）：
+- `env 'TMUX_TMPDIR=/tmp', 'tmux', '-f', '/home/user/.config/tmux-ai/.tmux.conf', '-L', 'ai', 'attach', '-t', 'ai-claude-1'` → exit code `1`
+
+这条 VS Code 弹窗**通常不会包含 tmux 的 stderr**，因此 exit code `1` 本身无法直接判断原因；需要把同一条命令在终端里跑一次看输出：
+
+```bash
+env -u TMUX TMUX_TMPDIR=/tmp tmux -f ~/.config/tmux-ai/.tmux.conf -L ai attach -t ai-claude-1
+```
+
+常见根因（按概率排序）：
+
+1) **backend 不一致（最常见）**：`TMUX_TMPDIR=/tmp` 不是创建该 session 时使用的 tmpdir；此时通常会看到：
+   - `no server running on /tmp/tmux-<uid>/ai`（连不上 server）
+   - 或 `can't find session: ai-claude-1`（连上了，但该 backend 下没有这个 session）
+
+   处理方式：
+   - 清空 `tmuxAi.cli.tmuxTmpDir`（让 CLI/扩展自动探测）或运行 `Tmux AI: Detect CLI Socket` 选择 `sessions>0` 的候选。
+
+2) **仍在嵌套 tmux 场景**：如果启动 VS Code/Remote 时 `TMUX` 被注入（或 VS Code 的 terminal env 清除失败），tmux 会报：
+   - `sessions should be nested with care, unset $TMUX to force`
+
+   处理方式：
+   - 确认 attach argv 包含 `env -u TMUX ...`，并升级到最新扩展/CLI（它会强制 `-u TMUX`）。
+
+3) **权限/沙箱限制**：某些受限环境（容器/沙箱/Snap 等）可能无法连接 `/tmp/tmux-<uid>/ai`，会看到：
+   - `Operation not permitted` / `permission denied`
+
+   处理方式：
+   - 尝试把 tmux socket 放到 `XDG_RUNTIME_DIR`（如 `/run/user/<uid>`）或一个明确可访问的目录，并用 `tmuxAi.cli.tmuxTmpDir` 对齐。
+
+把上面命令的 stderr 贴出来后，才能对号入座进一步精确修复。
+
 ## 本次修复的方向（代码层面）
 
 ### 1) 扩展：对齐 `TMUX_TMPDIR`
@@ -98,4 +132,3 @@ tmux 会判定这是“嵌套 tmux”，常见报错为：
 
 3) 若历史上已经产生“多套 backend”，可能存在重复 session：
 - 需要分别连接到各 backend 清理（kill/rename），最终保证全员统一到一个 `(TMUX_TMPDIR, socket)`。
-

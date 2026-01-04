@@ -51,6 +51,17 @@ function createAttachTerminal(options: {
   });
 }
 
+function ensureUnsetsTmuxInArgv(argv: string[]): string[] {
+  if (argv.length === 0) return argv;
+  if (argv[0] === "env") {
+    for (let i = 1; i < argv.length - 1; i++) {
+      if (argv[i] === "-u" && argv[i + 1] === "TMUX") return argv;
+    }
+    return ["env", "-u", "TMUX", ...argv.slice(1)];
+  }
+  return ["env", "-u", "TMUX", ...argv];
+}
+
 export function registerSessionCommands(
   context: vscode.ExtensionContext,
   provider: SessionsTreeProvider,
@@ -84,10 +95,11 @@ export function registerSessionCommands(
         const cfg = readConfig();
         const terminalName = formatPrimaryTerminalName(cfg.terminalNameFormat, shortName);
         const envOverrides = toTerminalEnv(getCliEnvOverrides(cfg));
+        const argv = ensureUnsetsTmuxInArgv(resp.argv);
         const terminal = createAttachTerminal({
           shortName,
           iconId: node.typeInfo.icon || "terminal",
-          argv: resp.argv,
+          argv,
           terminalName,
           env: envOverrides,
         });
@@ -127,11 +139,12 @@ export function registerSessionCommands(
           k,
         );
         const envOverrides = toTerminalEnv(getCliEnvOverrides(cfg));
+        const argv = ensureUnsetsTmuxInArgv(resp.argv);
 
         const terminal = createAttachTerminal({
           shortName,
           iconId: node.typeInfo.icon || "terminal",
-          argv: resp.argv,
+          argv,
           terminalName,
           env: envOverrides,
         });
