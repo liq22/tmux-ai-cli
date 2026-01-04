@@ -71,15 +71,12 @@ export function activate(context: vscode.ExtensionContext): void {
       }
     }
 
-    const orphaned = terminalManager.getOrphaned();
-    if (orphaned.length === 0) return;
-
     const now = Date.now();
     if (now - lastAutoDetectAt < 15_000) return;
     lastAutoDetectAt = now;
 
+    const orphaned = terminalManager.getOrphaned();
     const wanted = new Set(orphaned.map((o) => o.shortName).filter(Boolean));
-    if (wanted.size === 0) return;
 
     const baseOverrides = getCliEnvOverrides(cfg);
     const tmpDirs = candidateTmuxTmpDirs([cfg.cliTmuxTmpDir ?? ""].filter(Boolean));

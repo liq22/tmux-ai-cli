@@ -56,7 +56,7 @@ tmux 会判定这是“嵌套 tmux”，常见报错为：
 - 不再只选 `TMUX_AI_SOCKET`
 - 改为探测并选择 `(TMUX_TMPDIR, TMUX_AI_SOCKET)` 组合，确保连接到正确 tmux server
 
-同时在 “0 sessions + orphaned terminals” 时自动探测一次（`tmuxAi.cli.autoDetectBackend=true`）。
+同时在 “0 sessions” 时会自动探测一次（`tmuxAi.cli.autoDetectBackend=true`）。
 
 ### 1.0) 扩展：固定 CLI 运行的 cwd（帮助 `$PWD/.tmux-tmp` 探测）
 
@@ -98,3 +98,4 @@ tmux 会判定这是“嵌套 tmux”，常见报错为：
 
 3) 若历史上已经产生“多套 backend”，可能存在重复 session：
 - 需要分别连接到各 backend 清理（kill/rename），最终保证全员统一到一个 `(TMUX_TMPDIR, socket)`。
+

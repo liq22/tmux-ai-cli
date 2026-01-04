@@ -89,45 +89,6 @@ ls -la /run/user/$(id -u) || true
   选择 **sessions 数量最大且与你外部一致** 的候选（它会写入 `tmuxAi.cli.socket` 与 `tmuxAi.cli.tmuxTmpDir`）。
 - 再运行 `Tmux AI: Refresh Sessions`。
 
-### 1.2 计划中的代码增强（让对齐更“傻瓜”）
-
-- **CLI（`bin/ai`）在 `--json` 模式下不要吞掉 tmux 错误**：  
-  `list-sessions`/`has-session` 失败时返回：
-  - `ok:false, code:E_TMUX_CONNECT/E_TMUX_CONFIG, message, hint`
-- 新增 `ai doctor --json`（或 `ai debug --json`）输出：
-  - 最终采用的 `TMUX_TMPDIR`、`socket`、`tmux_conf`、推导出的 socket 路径
-  - `tmux list-sessions` 的 stderr（截断）
-  - 当前 `env.TMUX`（用于判断嵌套 tmux）
-- 扩展 `Tmux AI: Diagnostics` 调用 `ai doctor --json` 并展示（便于用户一键复制反馈）。
-
----
-
-## Step 2：如果确认是 H2（tmux.conf 问题）
-
-### 2.1 先定位 tmux 的真实报错
-
-tmux 的 stderr 往往会直接指出是哪一行配置错误或文件不可读。
-
-### 2.2 计划中的代码增强
-
-- CLI 在发现 `tmux_conf` 不存在时，**回退到仓库默认 config**（或 bundled config），并在 `--json` 中返回 hint。
-- 扩展增加一个“修复/重装 config”的命令（可选）：
-  - `Tmux AI: Repair CLI Config`：把 bundled 的 `.tmux.conf` 与 `ai-types.yaml` 写到 `~/.config/tmux-ai`（或扩展专用 configDir），并提示用户差异。
-
----
-
-## Step 3：如果确认是 H3（环境/权限隔离）
-
-### 3.1 需要确认 Extension Host 的运行位置
-
-通过 `Tmux AI: Diagnostics` 里的信息（尤其是 `cliPath` 与 `env.*`）判断是否在 Remote/容器。
-
-### 3.2 计划中的代码增强
-
-- 扩展在 list/attach 失败时，不再仅显示 `0 sessions`，而是提示：
-  - “无法连接 tmux server（socket 权限/目录不可访问）”
-  - 建议用户在同一环境下运行 tmux（或把 VS Code 放到相同 user/host）。
-
 ---
 
 ## Step 4：回归验证清单
@@ -141,12 +102,3 @@ tmux 的 stderr 往往会直接指出是哪一行配置错误或文件不可读�
 4) 新建 session：
    - 扩展创建后，外部 `ai list` 也能看到
 
----
-
-## 相关文件（实现时会改到）
-
-- CLI：`bin/ai`
-- 扩展 attach 终端：`packages/vscode-tmux-ai/src/commands/session.ts`
-- 扩展诊断：`packages/vscode-tmux-ai/src/commands/diagnostics.ts`
-- 扩展 backend 探测：`packages/vscode-tmux-ai/src/commands/detectSocket.ts`、`packages/vscode-tmux-ai/src/extension.ts`
-- 说明文档：`packages/vscode-tmux-ai/fix/README.md`
