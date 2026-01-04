@@ -1,4 +1,5 @@
 import * as fs from "node:fs/promises";
+import { constants as fsConstants } from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
 import * as vscode from "vscode";
@@ -41,7 +42,7 @@ async function isExecutableFile(filePath: string): Promise<boolean> {
   try {
     const stat = await fs.stat(filePath);
     if (!stat.isFile()) return false;
-    await fs.access(filePath, 0o111);
+    await fs.access(filePath, fsConstants.X_OK);
     return true;
   } catch {
     return false;

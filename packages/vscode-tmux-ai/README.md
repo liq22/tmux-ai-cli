@@ -67,7 +67,7 @@ vsce package
 Then install the generated `.vsix`:
 
 - VS Code UI: **Extensions** → **⋯** → **Install from VSIX…**
-- VS Code CLI: `code --install-extension vscode-tmux-ai-0.0.4.vsix`
+- VS Code CLI: `code --install-extension vscode-tmux-ai-0.0.5.vsix`
 
 ## Debug
 
