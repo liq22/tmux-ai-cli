@@ -43,6 +43,34 @@ export function activate(context: vscode.ExtensionContext): void {
     if (autoDetectInProgress) return;
     if (list.sessions.length > 0) return;
 
+    // If the user pinned a backend (socket/tmpdir) but it yields 0 sessions, try clearing the overrides
+    // so the CLI can auto-detect. This prevents "0 sessions" caused by a stale/wrong override.
+    if (cfg.cliSocket || cfg.cliTmuxTmpDir) {
+      autoDetectInProgress = true;
+      try {
+        const relaxedOverrides = getCliEnvOverrides(cfg);
+        delete relaxedOverrides.TMUX_AI_SOCKET;
+        delete relaxedOverrides.TMUX_TMPDIR;
+        delete relaxedOverrides.TMUX_AI_BACKEND_FIXED;
+
+        const runner = getCliRunner(cliPath, { debug: cfg.debug, envOverrides: relaxedOverrides });
+        const probed = await runner.list();
+        if (probed.sessions.length > 0) {
+          await updateCliSocket(null);
+          await updateCliTmuxTmpDir(null);
+          await provider.reload({ interactive: false, silent: true });
+          void vscode.window.showInformationMessage(
+            `Tmux AI: cleared backend overrides and found ${probed.sessions.length} session(s)`,
+          );
+          return;
+        }
+      } catch {
+        // ignore
+      } finally {
+        autoDetectInProgress = false;
+      }
+    }
+
     const orphaned = terminalManager.getOrphaned();
     if (orphaned.length === 0) return;
 
