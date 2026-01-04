@@ -31,7 +31,10 @@ export function registerDiagnosticsCommand(context: vscode.ExtensionContext): vo
       const envOverrides = getCliEnvOverrides(cfg);
       const cliPath = await ensureCliPath(true);
 
+      const extVersion = String((context.extension.packageJSON as any)?.version ?? "<unknown>");
+
       let listSummary: string;
+      let altListSummary: string | null = null;
       if (!cliPath) {
         listSummary = "cliPath: <not configured>";
       } else {
@@ -39,6 +42,17 @@ export function registerDiagnosticsCommand(context: vscode.ExtensionContext): vo
           const runner = getCliRunner(cliPath, { debug: cfg.debug, envOverrides });
           const list = await runner.list();
           listSummary = formatListSummary(list);
+
+          const shouldProbeAuto = list.sessions.length === 0 && (cfg.cliSocket || cfg.cliTmuxTmpDir);
+          if (shouldProbeAuto) {
+            const relaxed = { ...envOverrides };
+            delete relaxed.TMUX_AI_SOCKET;
+            delete relaxed.TMUX_TMPDIR;
+            delete relaxed.TMUX_AI_BACKEND_FIXED;
+            const runner2 = getCliRunner(cliPath, { debug: cfg.debug, envOverrides: relaxed });
+            const list2 = await runner2.list();
+            altListSummary = formatListSummary(list2);
+          }
         } catch (err) {
           listSummary = `list failed: ${formatError(err)}`;
         }
@@ -46,6 +60,7 @@ export function registerDiagnosticsCommand(context: vscode.ExtensionContext): vo
 
       const lines = [
         "Tmux AI diagnostics",
+        `- extensionVersion: ${extVersion}`,
         `- cliPath: ${cliPath ?? "<unset>"}`,
         `- tmuxAi.cli.socket: ${cfg.cliSocket ?? "<unset>"}`,
         `- tmuxAi.cli.configDir: ${cfg.cliConfigDir ?? "<unset>"}`,
@@ -56,7 +71,12 @@ export function registerDiagnosticsCommand(context: vscode.ExtensionContext): vo
         `- env.TMUX_AI_SOCKET: ${process.env.TMUX_AI_SOCKET ?? "<unset>"}`,
         `- env.TMUX_AI_CONFIG: ${process.env.TMUX_AI_CONFIG ?? "<unset>"}`,
         `- env.TMUX_TMPDIR: ${process.env.TMUX_TMPDIR ?? "<unset>"}`,
+        `- cliEnvOverrides.TMUX_AI_SOCKET: ${envOverrides.TMUX_AI_SOCKET ?? "<unset>"}`,
+        `- cliEnvOverrides.TMUX_AI_CONFIG: ${envOverrides.TMUX_AI_CONFIG ?? "<unset>"}`,
+        `- cliEnvOverrides.TMUX_TMPDIR: ${envOverrides.TMUX_TMPDIR ?? "<unset>"}`,
+        `- cliEnvOverrides.TMUX_AI_BACKEND_FIXED: ${envOverrides.TMUX_AI_BACKEND_FIXED ?? "<unset>"}`,
         `- ${listSummary}`,
+        ...(altListSummary ? [`- auto-detect probe: ${altListSummary}`] : []),
       ];
       const text = lines.join("\n");
 
