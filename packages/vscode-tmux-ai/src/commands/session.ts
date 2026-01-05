@@ -30,6 +30,16 @@ function toTerminalEnv(overrides: ReturnType<typeof getCliEnvOverrides>): Record
   return Object.keys(env).length > 0 ? env : undefined;
 }
 
+function shellEscapePosix(arg: string): string {
+  if (arg.length === 0) return "''";
+  if (/^[A-Za-z0-9_\/\-\.:,@%+=]+$/.test(arg)) return arg;
+  return `'${arg.replace(/'/g, `'\"'\"'`)}'`;
+}
+
+function argvToShellCommand(argv: string[]): string {
+  return argv.map(shellEscapePosix).join(" ");
+}
+
 function createAttachTerminal(options: {
   shortName: string;
   iconId: string;
@@ -41,14 +51,14 @@ function createAttachTerminal(options: {
     throw new Error("CLI returned empty argv for attach");
   }
   const instanceColor = deriveInstanceColor(options.shortName);
-  return vscode.window.createTerminal({
+  const terminal = vscode.window.createTerminal({
     name: options.terminalName,
-    shellPath: options.argv[0],
-    shellArgs: options.argv.slice(1),
     ...(options.env && Object.keys(options.env).length > 0 ? { env: options.env } : {}),
     iconPath: new vscode.ThemeIcon(options.iconId, instanceColor),
     color: instanceColor,
   });
+  terminal.sendText(argvToShellCommand(options.argv), true);
+  return terminal;
 }
 
 function ensureUnsetsTmuxInArgv(argv: string[]): string[] {

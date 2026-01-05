@@ -50,7 +50,9 @@ tmux 会判定这是“嵌套 tmux”，常见报错为：
 你反馈的错误（示例）：
 - `env 'TMUX_TMPDIR=/tmp', 'tmux', '-f', '/home/user/.config/tmux-ai/.tmux.conf', '-L', 'ai', 'attach', '-t', 'ai-claude-1'` → exit code `1`
 
-这条 VS Code 弹窗**通常不会包含 tmux 的 stderr**，因此 exit code `1` 本身无法直接判断原因；需要把同一条命令在终端里跑一次看输出：
+这条 VS Code 弹窗**通常不会包含 tmux 的 stderr**，因此 exit code `1` 本身无法直接判断原因；需要把同一条命令在终端里跑一次看输出。
+
+补充：扩展 v0.0.18+ 会用“正常 shell 终端 + sendText”来执行 attach，这样即使 attach 失败也不会立刻 `Dead`，tmux 的 stderr 会直接显示在终端里，更容易定位。
 
 ```bash
 env -u TMUX TMUX_TMPDIR=/tmp tmux -f ~/.config/tmux-ai/.tmux.conf -L ai attach -t ai-claude-1
