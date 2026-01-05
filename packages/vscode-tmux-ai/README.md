@@ -2,6 +2,8 @@
 
 `vscode-tmux-ai` integrates `tmux-ai-cli` into VS Code with a dedicated Activity Bar view to manage AI tmux sessions (multi-session, multi-client, passive sync, and orphaned terminal cleanup).
 
+**Version**: 0.0.18
+
 ## Prerequisites
 
 - `tmux` installed and usable in the same environment as the VS Code extension host (Local / SSH Remote / WSL).
@@ -15,14 +17,26 @@
 
 CLI contract reference: `docs/cli-contract.md`.
 
+### tmux Compatibility
+
+| tmux Version | Support Status |
+|--------------|----------------|
+| >= 3.1 | ✅ Fully supported |
+| 3.0a | ✅ Supported (v0.0.18+) |
+| < 3.0 | ⚠️ May have issues |
+
+**Note**: v0.0.18 includes fixes for tmux 3.0a compatibility.
+
 ## Getting Started
 
 1) Ensure `tmux-ai-cli` (`ai`) is available:
    - Default: the extension auto-installs a bundled `ai` into VS Code global storage (`tmuxAi.cli.autoInstallBundled=true`).
    - Manual: run `Tmux AI: Install tmux-ai-cli (Bundled)` (no `install.sh` needed).
    - Or install manually and ensure `ai` is executable in your environment.
+
 2) In VS Code, run:
    - `Tmux AI: Select CLI Path` (or set `tmuxAi.cliPath` manually)
+
 3) Open the Activity Bar container **Tmux AI** → **Sessions**.
 
 ## Features
@@ -37,12 +51,19 @@ CLI contract reference: `docs/cli-contract.md`.
 - **Workspace terminal profiles (optional)**: when `tmuxAi.terminal.useProfileFallback=true`, the extension generates workspace-level profiles like `AI: claude-1` so you can open a new attached terminal via the terminal profile dropdown.
 - **Degraded mode**: if CLI protocol is incompatible (wrong `protocolVersion` or non-JSON output), dangerous commands are disabled until the CLI is updated.
 
+## Recent Fixes (v0.0.18)
+
+- **tmux 3.0a Compatibility**: Fixed `list-sessions -t` incompatibility with older tmux versions
+- **Nested tmux Fix**: Extension now forces `env -u TMUX` when attaching to avoid "sessions should be nested with care" errors
+- **Improved Error Messages**: Attach now uses `sendText()` method, so tmux errors are displayed directly in the terminal
+- **Backend Auto-Detection**: When Sessions shows 0 but orphaned terminals exist, the extension can automatically detect the correct tmux backend
+
 ## Configuration
 
 - `tmuxAi.cliPath`: path to `ai`
 - `tmuxAi.cli.socket`: override `TMUX_AI_SOCKET` for the extension (optional)
 - `tmuxAi.cli.configDir`: override `TMUX_AI_CONFIG` for the extension (optional)
-- `tmuxAi.cli.tmuxTmpDir`: override `TMUX_TMPDIR` for the extension (optional; fixes “VS Code connects to a different tmux server than your shell”)
+- `tmuxAi.cli.tmuxTmpDir`: override `TMUX_TMPDIR` for the extension (optional; fixes "VS Code connects to a different tmux server than your shell")
 - `tmuxAi.cli.autoInstallBundled`: auto-install bundled `ai` into VS Code global storage when missing
 - `tmuxAi.cli.autoDetectBackend`: auto-detect tmux backend mismatch (when Sessions shows 0 but orphaned terminals exist)
 - `tmuxAi.discovery.searchPaths`: probe paths when `cliPath` is unset
@@ -86,13 +107,21 @@ Recommended workflow (with breakpoints):
 
 ## Troubleshooting
 
-- **Extension shows 0 sessions but `ai list` shows sessions**: run `Tmux AI: Detect CLI Socket` and select the backend that contains your sessions (sets `tmuxAi.cli.socket` + `tmuxAi.cli.tmuxTmpDir`), then refresh.
-- If it still shows 0, run `Tmux AI: Diagnostics` and ensure `tmuxAi.cliPath` points to the same `ai` you use in the shell, and that `tmuxAi.cli.socket` / `tmuxAi.cli.configDir` match your environment.
-- If your shell relies on `$PWD/.tmux-tmp`, check `cliCwd` in diagnostics: VS Code runs `ai` from the workspace root (or `$HOME` if no folder is open).
-- **Sessions created in the extension are not visible in your shell (or vice versa)**: this is almost always a backend mismatch (different `TMUX_AI_SOCKET`, `TMUX_AI_CONFIG`, or `TMUX_TMPDIR`).
-- **Connect/Attach terminal exits immediately with code 1**: if VS Code is started inside another tmux, `env.TMUX` may be set and tmux refuses to attach to a different server (“sessions should be nested with care…”). Upgrade to the latest extension/CLI (they unset `TMUX` for attach terminals), or launch VS Code outside tmux as a workaround.
+- **Extension shows 0 sessions but `ai list` shows sessions**:
+  - Run `Tmux AI: Detect CLI Socket` and select the backend that contains your sessions (sets `tmuxAi.cli.socket` + `tmuxAi.cli.tmuxTmpDir`), then refresh.
+
+- **Connect/Attach terminal exits immediately with code 1**:
+  - If VS Code is started inside another tmux, `env.TMUX` may be set and tmux refuses to attach to a different server ("sessions should be nested with care…").
+  - Upgrade to v0.0.18+ (they unset `TMUX` for attach terminals), or launch VS Code outside tmux as a workaround.
+
+- **Sessions created in the extension are not visible in your shell (or vice versa)**:
+  - This is almost always a backend mismatch (different `TMUX_AI_SOCKET`, `TMUX_AI_CONFIG`, or `TMUX_TMPDIR`).
+  - Run `Tmux AI: Diagnostics` to verify.
+
 - Quick fix: run `Tmux AI: Use CLI Install Defaults` (assumes `install.sh` defaults: `~/.local/bin/ai` + `~/.config/tmux-ai` + socket `ai`).
+
 - To edit CLI config: run `Tmux AI: Open CLI Config` (opens `ai-types.yaml` / `.tmux.conf`).
+
 - To remove the bundled CLI: run `Tmux AI: Uninstall tmux-ai-cli (Bundled)` (VS Code may not run cleanup automatically on uninstall, so run this command first if you want the files removed).
 
 ## Build / Package
