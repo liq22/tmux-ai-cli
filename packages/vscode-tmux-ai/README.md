@@ -4,6 +4,10 @@
 
 **Version**: 0.0.18
 
+## Screenshot
+
+![Tmux AI VS Code Extension](resources/tmux-ai-cli.png)
+
 ## Prerequisites
 
 - `tmux` installed and usable in the same environment as the VS Code extension host (Local / SSH Remote / WSL).

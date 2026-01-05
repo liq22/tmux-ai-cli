@@ -3,7 +3,7 @@
   "displayName": "Tmux AI",
   "description": "Production-grade VS Code integration for tmux-ai-cli (multi-session, multi-client, passive sync).",
   "version": "0.0.18",
-  "publisher": "tmux-ai",
+  "publisher": "thuliqilitchi",
   "repository": {
     "type": "git",
     "url": "https://github.com/liq22/tmux-ai-cli.git",
@@ -41,7 +41,7 @@
         {
           "id": "tmuxAi",
           "title": "Tmux AI",
-          "icon": "resources/tmux-ai.svg"
+          "icon": "resources/tmux-ai-cli.png"
         }
       ]
     },

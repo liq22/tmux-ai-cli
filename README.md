@@ -1,5 +1,7 @@
 # tmux-ai-cli
 
+![Tmux AI VS Code Extension](packages/vscode-tmux-ai/resources/tmux-ai-cli.png)
+
 [English](#english) | [中文](#中文)
 
 ---
@@ -22,11 +24,11 @@
 
 ### tmux 兼容性
 
-| tmux 版本 | 支持状态 |
-|-----------|----------|
-| >= 3.1 | ✅ 完全支持 |
-| 3.0a | ✅ 支持（已兼容） |
-| < 3.0 | ⚠️ 可能存在兼容性问题 |
+| tmux 版本 | 支持状态                |
+| --------- | ----------------------- |
+| >= 3.1    | ✅ 完全支持             |
+| 3.0a      | ✅ 支持（已兼容）       |
+| < 3.0     | ⚠️ 可能存在兼容性问题 |
 
 **注意**: v0.0.18 已修复 tmux 3.0a 的 `list-sessions -t` 不兼容问题。
 
@@ -118,11 +120,11 @@ ai master
 
 ### tmux Compatibility
 
-| tmux Version | Support Status |
-|--------------|----------------|
-| >= 3.1 | ✅ Fully supported |
-| 3.0a | ✅ Supported (compatibility fixed) |
-| < 3.0 | ⚠️ May have compatibility issues |
+| tmux Version | Support Status                     |
+| ------------ | ---------------------------------- |
+| >= 3.1       | ✅ Fully supported                 |
+| 3.0a         | ✅ Supported (compatibility fixed) |
+| < 3.0        | ⚠️ May have compatibility issues |
 
 **Note**: v0.0.18 fixed the `list-sessions -t` incompatibility with tmux 3.0a.
 
@@ -205,3 +207,5 @@ Issues and Pull Requests are welcome!
 
 - [tmux](https://github.com/tmux/tmux) - Terminal multiplexer
 - [Claude Code](https://claude.ai/code) - Anthropic's AI coding assistant
+- 自动更新 
+vsce publish minor
