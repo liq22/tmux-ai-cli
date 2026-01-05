@@ -548,7 +548,7 @@ emit_sessions_lines() {
     type="$(tmux_session_type "$session")"
     local attached_clients created_epoch last_used_epoch window_name
     attached_clients="$("${TMUX_CMD[@]}" list-clients -t "$session" 2>/dev/null | wc -l | tr -d ' ')"
-    read -r _sess created_epoch last_used_epoch < <("${TMUX_CMD[@]}" list-sessions -t "$session" -F '#{session_name} #{session_created} #{session_activity}' 2>/dev/null || true)
+    read -r _sess created_epoch last_used_epoch < <("${TMUX_CMD[@]}" list-sessions -F '#{session_name} #{session_created} #{session_activity}' 2>/dev/null | grep "^${session} " || true)
     window_name="$("${TMUX_CMD[@]}" list-windows -t "$session" -F '#{window_name}' 2>/dev/null | head -1 || true)"
     printf 'S\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n' \
       "$session" "$short_name" "$type" "$attached_clients" "$created_epoch" "$last_used_epoch" "$window_name"
@@ -726,7 +726,7 @@ session_info_json() {
   type="$(tmux_session_type "$session")"
   local attached_clients created_epoch last_used_epoch window_name
   attached_clients="$("${TMUX_CMD[@]}" list-clients -t "$session" 2>/dev/null | wc -l | tr -d ' ')"
-  read -r _sess created_epoch last_used_epoch < <("${TMUX_CMD[@]}" list-sessions -t "$session" -F '#{session_name} #{session_created} #{session_activity}' 2>/dev/null || true)
+  read -r _sess created_epoch last_used_epoch < <("${TMUX_CMD[@]}" list-sessions -F '#{session_name} #{session_created} #{session_activity}' 2>/dev/null | grep "^${session} " || true)
   window_name="$("${TMUX_CMD[@]}" list-windows -t "$session" -F '#{window_name}' 2>/dev/null | head -1 || true)"
 
   if has_python3; then
