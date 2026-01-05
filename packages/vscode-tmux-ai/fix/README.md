@@ -75,6 +75,8 @@ env -u TMUX TMUX_TMPDIR=/tmp tmux -f ~/.config/tmux-ai/.tmux.conf -L ai attach -
    - `Operation not permitted` / `permission denied`
 
    处理方式：
+   - 先确认 **VS Code 运行用户与 tmux server 用户一致**：在 VS Code 集成终端执行 `id -u`，并检查 `ls -la /tmp/tmux-$(id -u)` 的 owner/权限
+   - 如果你用的是 Snap/Flatpak 等沙箱版 VS Code：`/tmp` 往往是“私有命名空间”，导致看得到文件但无法连接/或根本不是同一个 `/tmp`；此时优先把 socket 放到 `$XDG_RUNTIME_DIR` 或 `$HOME/.tmux-tmp`（并在扩展里用 `tmuxAi.cli.tmuxTmpDir` 对齐）
    - 尝试把 tmux socket 放到 `XDG_RUNTIME_DIR`（如 `/run/user/<uid>`）或一个明确可访问的目录，并用 `tmuxAi.cli.tmuxTmpDir` 对齐。
 
 把上面命令的 stderr 贴出来后，才能对号入座进一步精确修复。
