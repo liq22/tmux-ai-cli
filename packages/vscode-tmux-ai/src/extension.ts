@@ -241,11 +241,17 @@ export function activate(context: vscode.ExtensionContext): void {
 
   void (async () => {
     const cfg = readConfig();
-    if (!cfg.cliAutoInstallBundled) return;
+    if (!cfg.cliAutoInstallBundled) {
+      void provider.reload({ interactive: false, silent: true });
+      return;
+    }
 
     const bundledCliPath = vscode.Uri.joinPath(context.globalStorageUri, "tmux-ai-cli", "bin", "ai").fsPath;
     const shouldManageBundled = !cfg.cliPath || cfg.cliPath === bundledCliPath;
-    if (!shouldManageBundled) return;
+    if (!shouldManageBundled) {
+      void provider.reload({ interactive: false, silent: true });
+      return;
+    }
 
     const cliPath = await ensureCliPath(false);
     if (cliPath && cliPath === bundledCliPath) {
@@ -263,10 +269,14 @@ export function activate(context: vscode.ExtensionContext): void {
         const message = err instanceof Error ? err.message : String(err);
         console.error(`auto update bundled tmux-ai-cli failed: ${message}`);
       }
+      void provider.reload({ interactive: false, silent: true });
       return;
     }
 
-    if (cliPath) return;
+    if (cliPath) {
+      void provider.reload({ interactive: false, silent: true });
+      return;
+    }
 
     try {
       await vscode.commands.executeCommand("tmuxAi.cli.installBundled", { silent: true });
@@ -274,6 +284,7 @@ export function activate(context: vscode.ExtensionContext): void {
       const message = err instanceof Error ? err.message : String(err);
       console.error(`auto install bundled tmux-ai-cli failed: ${message}`);
     }
+    void provider.reload({ interactive: false, silent: true });
   })();
 
   let passiveSyncTimer: NodeJS.Timeout | null = null;
@@ -302,7 +313,6 @@ export function activate(context: vscode.ExtensionContext): void {
   );
 
   void ensureWorkspaceTerminalFallbackSettings();
-  void provider.reload({ interactive: false, silent: true });
 }
 
 export function deactivate(): void {}

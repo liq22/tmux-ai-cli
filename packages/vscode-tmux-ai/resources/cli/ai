@@ -564,7 +564,7 @@ cmd_list_json() {
   local list_out rc=0 instance_sessions=""
   list_out="$("${TMUX_CMD[@]}" list-sessions -F '#{session_name}' 2>&1)" || rc=$?
   if [ "$rc" -ne 0 ]; then
-    if printf '%s' "$list_out" | grep -qi 'no server running on'; then
+    if printf '%s' "$list_out" | grep -qi 'no server running on\|No such file or directory'; then
       instance_sessions=""
     else
       json_error "E_TMUX_FAILED" "tmux list-sessions failed" "$list_out"
